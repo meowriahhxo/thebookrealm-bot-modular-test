@@ -40,8 +40,9 @@ const houseColors = {
 let lastProcessedRow = 0;
 
 async function getAuth() {
+  const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
   return new google.auth.GoogleAuth({
-    keyFile: 'credentials.json',
+    credentials,
     scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
   });
 }
