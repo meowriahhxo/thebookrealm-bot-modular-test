@@ -218,7 +218,7 @@ async function processQuizSubmission(row, rowNumber) {
     .setTitle(`✨ New Sorting Quiz Submission ${submissionNumber} ✨`)
     .setDescription(`Don't forget to check house count before announcing the results!`)
     .setColor(tiedHouses.length > 1 ? 0xff0000 : houseColors[winner])
-    .setFooter({ text: `Submitted at: ${new Date(row[0]).toLocaleString()}` })
+    .setFooter({ text: `Submitted at: ${new Date((row[0] - 25569) * 86400 * 1000).toLocaleString()}` })
     .addFields(
       { name: "❤️ Asphodel", value: `${houseCounts.Asphodel}`, inline: false },
       { name: "💙 Dreanni", value: `${houseCounts.Dreanni}`, inline: false },
