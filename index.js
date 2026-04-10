@@ -6,6 +6,7 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
   ]
 });
 
@@ -43,7 +44,7 @@ async function getAuth() {
   const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
   return new google.auth.GoogleAuth({
     credentials,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
   });
 }
 
@@ -262,11 +263,79 @@ async function checkForNewQuizSubmissions() {
   }
 }
 
-async function registerCommands() {
-  const commands = [
+async function getStickyMessages() {
+  const auth = await getAuth();
+  const sheets = google.sheets({ version: 'v4', auth });
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId: process.env.GLUE_STICK_SPREADSHEET_ID,
+    range: 'A2:D',
+  });
+  return response.data.values || [];
+}
+
+async function saveStickyMessage(channelName, channelId, message, messageId) {
+  const auth = await getAuth();
+  const sheets = google.sheets({ version: 'v4', auth: await getAuthWithWrite() });
+  const rows = await getStickyMessages();
+  const existingIndex = rows.findIndex(row => row[1] === channelId);
+  
+  if (existingIndex !== -1) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: process.env.GLUE_STICK_SPREADSHEET_ID,
+      range: `A${existingIndex + 2}:D${existingIndex + 2}`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [[channelName, channelId, message, messageId]] }
+    });
+  } else {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: process.env.GLUE_STICK_SPREADSHEET_ID,
+      range: 'A2:D',
+      valueInputOption: 'RAW',
+      requestBody: { values: [[channelName, channelId, message, messageId]] }
+    });
+  }
+}
+
+async function deleteStickyMessage(channelId) {
+  const auth = await getAuth();
+  const sheets = google.sheets({ version: 'v4', auth });
+  const rows = await getStickyMessages();
+  const existingIndex = rows.findIndex(row => row[1] === channelId);
+  if (existingIndex !== -1) {
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId: process.env.GLUE_STICK_SPREADSHEET_ID,
+      range: `A${existingIndex + 2}:D${existingIndex + 2}`,
+    });
+  }
+}
+
+const commands = [
     new SlashCommandBuilder()
       .setName('leaderboard')
       .setDescription('Show the current house points leaderboard')
+      .toJSON(),
+    new SlashCommandBuilder()
+      .setName('stick')
+      .setDescription('Stick a message to this channel')
+      .setDefaultMemberPermissions(8)
+      .addStringOption(option =>
+        option.setName('message')
+          .setDescription('The message to stick')
+          .setRequired(true))
+      .toJSON(),
+    new SlashCommandBuilder()
+      .setName('editstick')
+      .setDescription('Edit the sticky message in this channel')
+      .setDefaultMemberPermissions(8)
+      .addStringOption(option =>
+        option.setName('message')
+          .setDescription('The new message')
+          .setRequired(true))
+      .toJSON(),
+    new SlashCommandBuilder()
+      .setName('unstick')
+      .setDescription('Remove the sticky message from this channel')
+      .setDefaultMemberPermissions(8)
       .toJSON()
   ];
 
@@ -301,6 +370,98 @@ client.on('interactionCreate', async interaction => {
     } catch (error) {
       console.error('Error handling leaderboard command:', error);
     }
+  }
+
+  if (interaction.commandName === 'stick') {
+    try {
+      const message = interaction.options.getString('message');
+      const channel = interaction.channel;
+      const rows = await getStickyMessages();
+      const existing = rows.find(row => row[1] === channel.id);
+      if (existing && existing[3]) {
+        try {
+          const oldMessage = await channel.messages.fetch(existing[3]);
+          await oldMessage.delete();
+        } catch (e) {}
+      }
+      const sent = await channel.send(`📌 ${message}`);
+      await saveStickyMessage(channel.name, channel.id, message, sent.id);
+      await interaction.reply({ content: 'Sticky message set!', ephemeral: true });
+    } catch (error) {
+      console.error('Error setting sticky message:', error);
+      await interaction.reply({ content: 'Something went wrong!', ephemeral: true });
+    }
+  }
+
+  if (interaction.commandName === 'editstick') {
+    try {
+      const message = interaction.options.getString('message');
+      const channel = interaction.channel;
+      const rows = await getStickyMessages();
+      const existing = rows.find(row => row[1] === channel.id);
+      if (!existing) {
+        await interaction.reply({ content: 'No sticky message found in this channel!', ephemeral: true });
+        return;
+      }
+      if (existing[3]) {
+        try {
+          const oldMessage = await channel.messages.fetch(existing[3]);
+          await oldMessage.delete();
+        } catch (e) {}
+      }
+      const sent = await channel.send(`📌 ${message}`);
+      await saveStickyMessage(channel.name, channel.id, message, sent.id);
+      await interaction.reply({ content: 'Sticky message updated!', ephemeral: true });
+    } catch (error) {
+      console.error('Error editing sticky message:', error);
+      await interaction.reply({ content: 'Something went wrong!', ephemeral: true });
+    }
+  }
+
+  if (interaction.commandName === 'unstick') {
+    try {
+      const channel = interaction.channel;
+      const rows = await getStickyMessages();
+      const existing = rows.find(row => row[1] === channel.id);
+      if (!existing) {
+        await interaction.reply({ content: 'No sticky message found in this channel!', ephemeral: true });
+        return;
+      }
+      if (existing[3]) {
+        try {
+          const oldMessage = await channel.messages.fetch(existing[3]);
+          await oldMessage.delete();
+        } catch (e) {}
+      }
+      await deleteStickyMessage(channel.id);
+      await interaction.reply({ content: 'Sticky message removed!', ephemeral: true });
+    } catch (error) {
+      console.error('Error removing sticky message:', error);
+      await interaction.reply({ content: 'Something went wrong!', ephemeral: true });
+    }
+  }
+});
+
+client.on('messageCreate', async message => {
+  if (message.author.bot) return;
+  
+  try {
+    const rows = await getStickyMessages();
+    const sticky = rows.find(row => row[1] === message.channelId);
+    
+    if (!sticky || !sticky[2]) return;
+    
+    if (sticky[3]) {
+      try {
+        const oldMessage = await message.channel.messages.fetch(sticky[3]);
+        await oldMessage.delete();
+      } catch (e) {}
+    }
+    
+    const sent = await message.channel.send(`📌 ${sticky[2]}`);
+    await saveStickyMessage(sticky[0], sticky[1], sticky[2], sent.id);
+  } catch (error) {
+    console.error('Error reposting sticky message:', error);
   }
 });
 
