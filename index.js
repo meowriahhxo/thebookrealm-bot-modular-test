@@ -37,6 +37,7 @@ const houseColors = {
 };
 
 let lastProcessedRow = 0;
+let lastLeaderboardPost = 0;
 
 async function getAuth() {
   const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
@@ -92,6 +93,10 @@ function buildLeaderboardEmbed(housePoints) {
 }
 
 async function postLeaderboard() {
+  const now = Date.now();
+  if (now - lastLeaderboardPost < 60000) return;
+  lastLeaderboardPost = now;
+  
   try {
     const housePoints = await getSheetData();
     const embed = buildLeaderboardEmbed(housePoints);
