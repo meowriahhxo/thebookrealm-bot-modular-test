@@ -351,7 +351,7 @@ client.once('clientReady', async () => {
   await initializeLastProcessedRow();
   await registerCommands();
   
-  cron.schedule('0 * * * *', () => {
+  cron.schedule('*/30 * * * *', () => {
     postLeaderboard();
   });
 
