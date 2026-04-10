@@ -469,7 +469,9 @@ client.on('messageCreate', async message => {
 
 client.on('guildMemberAdd', async member => {
   try {
-    const { createCanvas, loadImage } = require('canvas');
+    const { createCanvas, loadImage, registerFont } = require('canvas');
+    registerFont('./Roboto-Bold.ttf', { family: 'Roboto', weight: 'bold' });
+    registerFont('./Roboto-Regular.ttf', { family: 'Roboto' });
     const canvas = createCanvas(800, 300);
     const ctx = canvas.getContext('2d');
 
@@ -497,17 +499,17 @@ client.on('guildMemberAdd', async member => {
 
     // "Welcome!" text
     ctx.fillStyle = '#333333';
-    ctx.font = 'bold 42px DejaVu Sans';
+    ctx.font = 'bold 42px Roboto';
     ctx.fillText('Welcome!', 280, 120);
 
     // Username text
-    ctx.font = '28px DejaVu Sans';
+    ctx.font = '28px Roboto';
     ctx.fillStyle = '#555555';
     ctx.fillText(member.user.username, 280, 170);
 
     // Member count
     const memberCount = member.guild.memberCount;
-    ctx.font = '22px DejaVu Sans';
+    ctx.font = '22px Roboto';
     ctx.fillStyle = '#888888';
     ctx.fillText(`Member #${memberCount}`, 280, 215);
 
