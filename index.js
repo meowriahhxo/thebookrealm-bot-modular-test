@@ -497,17 +497,17 @@ client.on('guildMemberAdd', async member => {
 
     // "Welcome!" text
     ctx.fillStyle = '#333333';
-    ctx.font = 'bold 42px sans-serif';
+    ctx.font = 'bold 42px DejaVu Sans';
     ctx.fillText('Welcome!', 280, 120);
 
     // Username text
-    ctx.font = '28px sans-serif';
+    ctx.font = '28px DejaVu Sans';
     ctx.fillStyle = '#555555';
     ctx.fillText(member.user.username, 280, 170);
 
     // Member count
     const memberCount = member.guild.memberCount;
-    ctx.font = '22px sans-serif';
+    ctx.font = '22px DejaVu Sans';
     ctx.fillStyle = '#888888';
     ctx.fillText(`Member #${memberCount}`, 280, 215);
 
