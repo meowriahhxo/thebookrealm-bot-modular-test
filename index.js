@@ -469,20 +469,59 @@ client.on('messageCreate', async message => {
 
 client.on('guildMemberAdd', async member => {
   try {
+    const { createCanvas, loadImage } = require('canvas');
+    const canvas = createCanvas(800, 300);
+    const ctx = canvas.getContext('2d');
+
+    // Draw background
+    const background = await loadImage('./welcome-background.png');
+    ctx.drawImage(background, 0, 0, 800, 300);
+
+    // Draw circular avatar
+    const avatarURL = member.user.displayAvatarURL({ extension: 'png', size: 256 });
+    const avatar = await loadImage(avatarURL);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(150, 150, 90, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+    ctx.drawImage(avatar, 60, 60, 180, 180);
+    ctx.restore();
+
+    // Optional: white ring around avatar
+    ctx.beginPath();
+    ctx.arc(150, 150, 91, 0, Math.PI * 2);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    // "Welcome!" text
+    ctx.fillStyle = '#333333';
+    ctx.font = 'bold 42px sans-serif';
+    ctx.fillText('Welcome!', 280, 120);
+
+    // Username text
+    ctx.font = '28px sans-serif';
+    ctx.fillStyle = '#555555';
+    ctx.fillText(member.user.username, 280, 170);
+
+    // Member count
+    const memberCount = member.guild.memberCount;
+    ctx.font = '22px sans-serif';
+    ctx.fillStyle = '#888888';
+    ctx.fillText(`Member #${memberCount}`, 280, 215);
+
+    // Send to channel
+    const { AttachmentBuilder } = require('discord.js');
+    const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'welcome.png' });
     const channel = await client.channels.fetch(process.env.JOINS_LEAVES_CHANNEL_ID);
-    await channel.send(`Hey ${member}, welcome to **The Book Realm**! 
-All of the server channels and rules can be found in <#971504387056885861>. <a:book_pages:838547896361811979> We suggest you first take the house quiz, which can be found in the same channel under the *House System* header. Each house competes monthly for the House Cup! Next, you can head over to <#971504539138130010> and let us know a little bit about you, and then <#971501013297135636> to choose which channels and activities you'd like to be notified about or participate in. If you have any questions, please feel free to ping a moderator or DM the ModMail bot (instructions are outlined in the welcome channel). The moderators are pink, purple, and dark blue 💜`);
+    await channel.send({ 
+      content: `Welcome to The Book Realm, <@${member.id}>! 🎉`,
+      files: [attachment] 
+    });
+
   } catch (error) {
     console.error('Error sending welcome message:', error);
-  }
-});
-
-client.on('guildMemberRemove', async member => {
-  try {
-    const channel = await client.channels.fetch(process.env.JOINS_LEAVES_CHANNEL_ID);
-    await channel.send(`**${member.user.username}** just left the server :( We will miss you!`);
-  } catch (error) {
-    console.error('Error sending leave message:', error);
   }
 });
 
