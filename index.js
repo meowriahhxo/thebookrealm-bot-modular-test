@@ -270,7 +270,7 @@ async function registerCommands() {
   console.log('Slash commands registered!');
 }
 
-client.once('ready', async () => {
+client.once('clientReady', async () => {
   console.log(`Bot is online as ${client.user.tag}!`);
   await initializeLastProcessedRow();
   await registerCommands();
