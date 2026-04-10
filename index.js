@@ -385,7 +385,7 @@ client.on('interactionCreate', async interaction => {
           await oldMessage.delete();
         } catch (e) {}
       }
-      const sent = await channel.send(`📌 ${message}`);
+      const sent = await channel.send(`${message}`);
       await saveStickyMessage(channel.name, channel.id, message, sent.id);
       await interaction.reply({ content: 'Sticky message set!', ephemeral: true });
     } catch (error) {
