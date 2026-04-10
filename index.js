@@ -376,7 +376,7 @@ client.on('interactionCreate', async interaction => {
 
   if (interaction.commandName === 'stick') {
     try {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: 64 });
       const message = interaction.options.getString('message');
       const channel = interaction.channel;
       const rows = await getStickyMessages();
@@ -398,7 +398,7 @@ client.on('interactionCreate', async interaction => {
 
 if (interaction.commandName === 'editstick') {
     try {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: 64 });
       const message = interaction.options.getString('message');
       const channel = interaction.channel;
       const rows = await getStickyMessages();
@@ -423,7 +423,7 @@ if (interaction.commandName === 'editstick') {
 
   if (interaction.commandName === 'unstick') {
     try {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: 64 });
       const channel = interaction.channel;
       const rows = await getStickyMessages();
       const existing = rows.find(row => row[1] === channel.id);
