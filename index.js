@@ -376,7 +376,7 @@ client.on('interactionCreate', async interaction => {
 
   if (interaction.commandName === 'stick') {
     try {
-      const message = interaction.options.getString('message');
+      await interaction.deferReply({ ephemeral: true });
       const channel = interaction.channel;
       const rows = await getStickyMessages();
       const existing = rows.find(row => row[1] === channel.id);
@@ -388,7 +388,7 @@ client.on('interactionCreate', async interaction => {
       }
       const sent = await channel.send(`${message}`);
       await saveStickyMessage(channel.name, channel.id, message, sent.id);
-      await interaction.reply({ content: 'Sticky message set!', ephemeral: true });
+      await interaction.editReply({ content: 'Sticky message set!' });
     } catch (error) {
       console.error('Error setting sticky message:', error);
       await interaction.reply({ content: 'Something went wrong!', ephemeral: true });
