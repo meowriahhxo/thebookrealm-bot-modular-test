@@ -7,6 +7,7 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers,
   ]
 });
 
@@ -463,6 +464,25 @@ client.on('messageCreate', async message => {
     await saveStickyMessage(sticky[0], sticky[1], sticky[2], sent.id);
   } catch (error) {
     console.error('Error reposting sticky message:', error);
+  }
+});
+
+client.on('guildMemberAdd', async member => {
+  try {
+    const channel = await client.channels.fetch(process.env.JOINS_LEAVES_CHANNEL_ID);
+    await channel.send(`Hey ${member}, welcome to **The Book Realm**! 
+All of the server channels and rules can be found in <#971504387056885861>. <a:book_pages:838547896361811979> We suggest you first take the house quiz, which can be found in the same channel under the *House System* header. Each house competes monthly for the House Cup! Next, you can head over to <#971504539138130010> and let us know a little bit about you, and then <#971501013297135636> to choose which channels and activities you'd like to be notified about or participate in. If you have any questions, please feel free to ping a moderator or DM the ModMail bot (instructions are outlined in the welcome channel). The moderators are pink, purple, and dark blue 💜`);
+  } catch (error) {
+    console.error('Error sending welcome message:', error);
+  }
+});
+
+client.on('guildMemberRemove', async member => {
+  try {
+    const channel = await client.channels.fetch(process.env.JOINS_LEAVES_CHANNEL_ID);
+    await channel.send(`**${member.user.username}** just left the server :( We will miss you!`);
+  } catch (error) {
+    console.error('Error sending leave message:', error);
   }
 });
 
