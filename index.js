@@ -396,14 +396,15 @@ client.on('interactionCreate', async interaction => {
     }
   }
 
-  if (interaction.commandName === 'editstick') {
+if (interaction.commandName === 'editstick') {
     try {
+      await interaction.deferReply({ ephemeral: true });
       const message = interaction.options.getString('message');
       const channel = interaction.channel;
       const rows = await getStickyMessages();
       const existing = rows.find(row => row[1] === channel.id);
       if (!existing) {
-        await interaction.reply({ content: 'No sticky message found in this channel!', ephemeral: true });
+        await interaction.editReply({ content: 'No sticky message found in this channel!' });
         return;
       }
       if (existing[3]) {
@@ -414,20 +415,20 @@ client.on('interactionCreate', async interaction => {
       }
       const sent = await channel.send(`${message}`);
       await saveStickyMessage(channel.name, channel.id, message, sent.id);
-      await interaction.reply({ content: 'Sticky message updated!', ephemeral: true });
+      await interaction.editReply({ content: 'Sticky message updated!' });
     } catch (error) {
       console.error('Error editing sticky message:', error);
-      await interaction.reply({ content: 'Something went wrong!', ephemeral: true });
     }
   }
 
   if (interaction.commandName === 'unstick') {
     try {
+      await interaction.deferReply({ ephemeral: true });
       const channel = interaction.channel;
       const rows = await getStickyMessages();
       const existing = rows.find(row => row[1] === channel.id);
       if (!existing) {
-        await interaction.reply({ content: 'No sticky message found in this channel!', ephemeral: true });
+        await interaction.editReply({ content: 'No sticky message found in this channel!' });
         return;
       }
       if (existing[3]) {
@@ -437,10 +438,9 @@ client.on('interactionCreate', async interaction => {
         } catch (e) {}
       }
       await deleteStickyMessage(channel.id);
-      await interaction.reply({ content: 'Sticky message removed!', ephemeral: true });
+      await interaction.editReply({ content: 'Sticky message removed!' });
     } catch (error) {
       console.error('Error removing sticky message:', error);
-      await interaction.reply({ content: 'Something went wrong!', ephemeral: true });
     }
   }
 });
