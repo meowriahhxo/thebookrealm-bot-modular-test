@@ -505,7 +505,7 @@ client.on('guildMemberAdd', async member => {
     // Username text
     ctx.font = '28px Roboto';
     ctx.fillStyle = '#555555';
-    ctx.fillText(`${member.user.username} just joined the server!`, 280, 170);
+    ctx.fillText(`${member.user.username} just joined the server`, 280, 170);
 
     // Member count
     const memberCount = member.guild.memberCount;
