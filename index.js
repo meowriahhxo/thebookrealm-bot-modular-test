@@ -410,7 +410,7 @@ client.on('interactionCreate', async interaction => {
           await oldMessage.delete();
         } catch (e) {}
       }
-      const sent = await channel.send(`📌 ${message}`);
+      const sent = await channel.send(`${message}`);
       await saveStickyMessage(channel.name, channel.id, message, sent.id);
       await interaction.reply({ content: 'Sticky message updated!', ephemeral: true });
     } catch (error) {
@@ -459,7 +459,7 @@ client.on('messageCreate', async message => {
       } catch (e) {}
     }
     
-    const sent = await message.channel.send(`📌 ${sticky[2]}`);
+    const sent = await message.channel.send(`${sticky[2]}`);
     await saveStickyMessage(sticky[0], sticky[1], sticky[2], sent.id);
   } catch (error) {
     console.error('Error reposting sticky message:', error);
