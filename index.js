@@ -518,7 +518,7 @@ client.on('guildMemberAdd', async member => {
     const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'welcome.png' });
     const channel = await client.channels.fetch(process.env.JOINS_LEAVES_CHANNEL_ID);
     await channel.send({ 
-    content: `Hey <@${member.id}>, welcome to **The Book Realm**!\nAll of the server channels and rules can be found in <#971504387056885861>. <a:book_pages:838547896361811979> We suggest you first take the house quiz, which can be found in the same channel under the *House System* header. Each house competes monthly for the House Cup! Next, you can head over to <#971504539138130010> and let us know a little bit about you, and then <#971501013297135636> to choose which channels and activities you'd like to be notified about or participate in. If you have any questions, please feel free to ping a moderator or DM the ModMail bot (instructions are outlined in the welcome channel). The moderators are pink, purple, and dark blue 💜`,
+    content: `Hello <@${member.id}>, welcome to **The Book Realm**!\nAll of the server channels and rules can be found in <#971504387056885861>. <a:book_pages:838547896361811979> We suggest you first take the house quiz, which can be found in the same channel under the *House System* header. Each house competes monthly for the House Cup! Next, you can head over to <#971504539138130010> and let us know a little bit about you, and then <#971501013297135636> to choose which channels and activities you'd like to be notified about or participate in. If you have any questions, please feel free to ping a moderator or DM the ModMail bot (instructions are outlined in the welcome channel). The moderators are pink, purple, and dark blue 💜`,
       files: [attachment] 
     });
 
@@ -530,7 +530,7 @@ client.on('guildMemberAdd', async member => {
 client.on('guildMemberRemove', async member => {
   try {
     const channel = await client.channels.fetch(process.env.JOINS_LEAVES_CHANNEL_ID);
-    await channel.send(`**${member.user.username}** just left the server :( We will miss you!`);
+    await channel.send(`**${member.user.username}** just left the realm <a:book_pages:838547896361811979> We will miss you! :()`);
   } catch (error) {
     console.error('Error sending leave message:', error);
   }
