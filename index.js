@@ -499,7 +499,7 @@ client.on('guildMemberAdd', async member => {
 
     // "Welcome!" text
     ctx.fillStyle = '#333333';
-    ctx.font = 'bold 42px Roboto';
+    ctx.font = 'bold 34px Roboto';
     ctx.fillText('Welcome to The Book Realm!', 280, 120);
 
     // Username text
