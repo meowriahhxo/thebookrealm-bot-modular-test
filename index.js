@@ -275,7 +275,7 @@ async function getStickyMessages() {
 
 async function saveStickyMessage(channelName, channelId, message, messageId) {
   const auth = await getAuth();
-  const sheets = google.sheets({ version: 'v4', auth: await getAuthWithWrite() });
+  const sheets = google.sheets({ version: 'v4', auth });
   const rows = await getStickyMessages();
   const existingIndex = rows.findIndex(row => row[1] === channelId);
   
@@ -309,7 +309,8 @@ async function deleteStickyMessage(channelId) {
   }
 }
 
-const commands = [
+async function registerCommands() {
+  const commands = [
     new SlashCommandBuilder()
       .setName('leaderboard')
       .setDescription('Show the current house points leaderboard')
