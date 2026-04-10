@@ -531,7 +531,7 @@ client.on('guildMemberAdd', async member => {
 client.on('guildMemberRemove', async member => {
   try {
     const channel = await client.channels.fetch(process.env.JOINS_LEAVES_CHANNEL_ID);
-    await channel.send(`**${member.user.username}** just left the realm <a:book_pages:838547896361811979> We will miss you! :( (ID: ${member.id})`);
+    await channel.send(`**${member.user.username}** just left the realm <a:book_pages:838547896361811979> We will miss you! :(`);
   } catch (error) {
     console.error('Error sending leave message:', error);
   }
