@@ -1,5 +1,3 @@
-process.env.FONTCONFIG_PATH = '/etc/fonts';
-
 const { Client, GatewayIntentBits, EmbedBuilder, REST, Routes, SlashCommandBuilder } = require('discord.js');
 const { google } = require('googleapis');
 const cron = require('node-cron');
