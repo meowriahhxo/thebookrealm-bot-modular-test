@@ -389,7 +389,7 @@ client.on('interactionCreate', async interaction => {
       }
       const sent = await channel.send(`${message}`);
       await saveStickyMessage(channel.name, channel.id, message, sent.id);
-      await interaction.editReply({ content: 'Sticky message removed!' });
+      await interaction.editReply({ content: 'Sticky message set!' });
     } catch (error) {
       console.error('Error setting sticky message:', error);
       await interaction.reply({ content: 'Something went wrong!', ephemeral: true });
