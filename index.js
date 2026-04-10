@@ -498,13 +498,13 @@ client.on('guildMemberAdd', async member => {
     ctx.stroke();
 
     // "Welcome!" text
-    ctx.fillStyle = '#333333';
+    ctx.fillStyle = '#976ff6';
     ctx.font = 'bold 34px Roboto';
     ctx.fillText('Welcome to The Book Realm!', 280, 120);
 
     // Username text
     ctx.font = '28px Roboto';
-    ctx.fillStyle = '#555555';
+    ctx.fillStyle = '#ff81a5';
     ctx.fillText(`${member.user.username} just joined the server!`, 280, 170);
 
     // Member count
