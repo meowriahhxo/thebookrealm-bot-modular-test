@@ -446,7 +446,7 @@ if (interaction.commandName === 'editstick') {
 });
 
 client.on('messageCreate', async message => {
-  if (message.author.bot) return;
+  if (message.author.id === client.user.id) return;
   
   try {
     const rows = await getStickyMessages();
