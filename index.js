@@ -25,10 +25,10 @@ const monthNames = [
 ];
 
 const houseEmojis = {
-  Asphodel: "❤️",
-  Dreanni: "💙",
-  Laiidon: "💛",
-  Zeldarian: "💚"
+  Asphodel: "<a:asphribbon:1480990154754756923>",
+  Dreanni: "<a:dreanniribbon:1480990271276711989> ",
+  Laiidon: "<a:laiidonribbon:1480990039067328574> ",
+  Zeldarian: "<a:zeldribbon:1480990220324307086>"
 };
 
 const houseColors = {
@@ -226,10 +226,10 @@ async function processQuizSubmission(row, rowNumber) {
     .setColor(tiedHouses.length > 1 ? 0xff0000 : houseColors[winner])
     .setFooter({ text: `Submitted at: ${new Date((row[0] - 25569) * 86400 * 1000).toLocaleString()}` })
     .addFields(
-      { name: "❤️ Asphodel", value: `${houseCounts.Asphodel}`, inline: false },
-      { name: "💙 Dreanni", value: `${houseCounts.Dreanni}`, inline: false },
-      { name: "💛 Laiidon", value: `${houseCounts.Laiidon}`, inline: false },
-      { name: "💚 Zeldarian", value: `${houseCounts.Zeldarian}`, inline: false },
+      { name: "<:asphheart:1492573486785499307> Asphodel", value: `${houseCounts.Asphodel}`, inline: false },
+      { name: "<:dreanniheart:1492573488425340928> Dreanni", value: `${houseCounts.Dreanni}`, inline: false },
+      { name: "<:laiidonheart:1492573490434281532> Laiidon", value: `${houseCounts.Laiidon}`, inline: false },
+      { name: "<:zeldheart:1492573492564983970> Zeldarian", value: `${houseCounts.Zeldarian}`, inline: false },
       { name: "Results", value: `**${memberName}** has been sorted into **House ${winner}**! ${houseEmojis[winner]}${tieNote}`, inline: false }
     );
 
