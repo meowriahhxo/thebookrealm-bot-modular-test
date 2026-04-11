@@ -25,10 +25,10 @@ const monthNames = [
 ];
 
 const houseEmojis = {
-  Asphodel: "<a:asphribbon:1480990154754756923>",
-  Dreanni: "<a:dreanniribbon:1480990271276711989> ",
-  Laiidon: "<a:laiidonribbon:1480990039067328574> ",
-  Zeldarian: "<a:zeldribbon:1480990220324307086>"
+  Asphodel: "<a:asphribbon:1492572351039279327>",
+  Dreanni: "<a:dreanniribbon:1492572424703578113>",
+  Laiidon: "<:laiidonheart:1492573490434281532>",
+  Zeldarian: "<:zeldheart:1492573492564983970>"
 };
 
 const houseColors = {
