@@ -25,10 +25,10 @@ const monthNames = [
 ];
 
 const houseEmojis = {
-  Asphodel: "<a:asphribbon:1492572351039279327>",
-  Dreanni: "<a:dreanniribbon:1492572424703578113>",
-  Laiidon: "<:laiidonheart:1492573490434281532>",
-  Zeldarian: "<:zeldheart:1492573492564983970>"
+  Asphodel: "<:asphbow:1492891568208609400>",
+  Dreanni: "<:dreannibow:1492891616577327176>",
+  Laiidon: "<:laiidonbow:1492891667408359588>",
+  Zeldarian: "<:zeldarianbow:1492891711859331284>"
 };
 
 const houseColors = {
@@ -503,9 +503,14 @@ client.on('guildMemberAdd', async member => {
     ctx.font = 'bold 34px Roboto';
     ctx.fillText('Welcome to The Book Realm!', 280, 120);
 
-    // Username text
-    ctx.font = '28px Roboto';
+   // Username text
     ctx.fillStyle = '#555555';
+    let usernameFontSize = 28;
+    ctx.font = `${usernameFontSize}px Roboto`;
+    while (ctx.measureText(`${member.user.username} just joined the server`).width > 480 && usernameFontSize > 14) {
+    usernameFontSize--;
+    ctx.font = `${usernameFontSize}px Roboto`;
+    }
     ctx.fillText(`${member.user.username} just joined the server`, 280, 170);
 
     // Member count
