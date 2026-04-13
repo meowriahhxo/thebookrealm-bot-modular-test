@@ -12,10 +12,10 @@ const client = new Client({
 });
 
 const HOUSES = [
-  { name: "House Asphodel", row: 42, col: 2, color: 0x92374e },
-  { name: "House Dreanni", row: 42, col: 3, color: 0x84c6ff },
-  { name: "House Laiidon", row: 42, col: 4, color: 0xc2ab81 },
-  { name: "House Zeldarian", row: 42, col: 5, color: 0x3eba9a }
+  { name: "House Asphodel", row: 43, col: 2, color: 0x92374e },
+  { name: "House Dreanni", row: 43, col: 3, color: 0x84c6ff },
+  { name: "House Laiidon", row: 43, col: 4, color: 0xc2ab81 },
+  { name: "House Zeldarian", row: 43, col: 5, color: 0x3eba9a }
 ];
 
 const monthNames = [
