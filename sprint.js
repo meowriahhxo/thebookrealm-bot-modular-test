@@ -14,12 +14,12 @@ const pendingSprints = {};
 const cooldowns = {};
 
 const channelSprintTypes = {
-  'TALL_TOMES_CHANNEL_ID': 'Tall Tomes Sprint',
-  'SHORT_STACKS_CHANNEL_ID': 'Short Stacks Sprint',
-  'READATHON_CHANNEL_ID': 'Readathon Sprint',
-  'WRITING_CHANNEL_ID': 'Writing Sprint',
-  'ART_CHANNEL_ID': 'Art Sprint',
-  'STUDY_CHANNEL_ID': 'Study Sprint'
+  [process.env.TALL_TOMES_CHANNEL_ID]: 'Tall Tomes Sprint',
+  [process.env.SHORT_STACKS_CHANNEL_ID]: 'Short Stacks Sprint',
+  [process.env.READATHON_CHANNEL_ID]: 'Readathon Sprint',
+  [process.env.WRITING_CHANNEL_ID]: 'Writing Sprint',
+  [process.env.ART_CHANNEL_ID]: 'Art Sprint',
+  [process.env.STUDY_CHANNEL_ID]: 'Study Sprint'
 };
 
 const sprintEmojis = {
