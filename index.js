@@ -2,6 +2,25 @@ const { Client, GatewayIntentBits, EmbedBuilder, REST, Routes, SlashCommandBuild
 const { google } = require('googleapis');
 const cron = require('node-cron');
 
+const { Pool } = require('pg');
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+async function initializeDatabase() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sticky_messages (
+        channel_id TEXT PRIMARY KEY,
+        channel_name TEXT,
+        message TEXT,
+        message_id TEXT
+      )
+    `);
+    console.log('Database initialized!');
+  } catch (error) {
+    console.error('Database initialization error:', error);
+  }
+}
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -265,49 +284,26 @@ async function checkForNewQuizSubmissions() {
 }
 
 async function getStickyMessages() {
-  const auth = await getAuth();
-  const sheets = google.sheets({ version: 'v4', auth });
-  const response = await sheets.spreadsheets.values.get({
-    spreadsheetId: process.env.GLUE_STICK_SPREADSHEET_ID,
-    range: 'A2:D',
-  });
-  return response.data.values || [];
+  const result = await pool.query('SELECT * FROM sticky_messages');
+  return result.rows;
+}
+
+async function getStickyByChannel(channelId) {
+  const result = await pool.query('SELECT * FROM sticky_messages WHERE channel_id = $1', [channelId]);
+  return result.rows[0] || null;
 }
 
 async function saveStickyMessage(channelName, channelId, message, messageId) {
-  const auth = await getAuth();
-  const sheets = google.sheets({ version: 'v4', auth });
-  const rows = await getStickyMessages();
-  const existingIndex = rows.findIndex(row => row[1] === channelId);
-  
-  if (existingIndex !== -1) {
-    await sheets.spreadsheets.values.update({
-      spreadsheetId: process.env.GLUE_STICK_SPREADSHEET_ID,
-      range: `A${existingIndex + 2}:D${existingIndex + 2}`,
-      valueInputOption: 'RAW',
-      requestBody: { values: [[channelName, channelId, message, messageId]] }
-    });
-  } else {
-    await sheets.spreadsheets.values.append({
-      spreadsheetId: process.env.GLUE_STICK_SPREADSHEET_ID,
-      range: 'A2:D',
-      valueInputOption: 'RAW',
-      requestBody: { values: [[channelName, channelId, message, messageId]] }
-    });
-  }
+  await pool.query(`
+    INSERT INTO sticky_messages (channel_id, channel_name, message, message_id)
+    VALUES ($1, $2, $3, $4)
+    ON CONFLICT (channel_id) DO UPDATE
+    SET channel_name = $2, message = $3, message_id = $4
+  `, [channelId, channelName, message, messageId]);
 }
 
 async function deleteStickyMessage(channelId) {
-  const auth = await getAuth();
-  const sheets = google.sheets({ version: 'v4', auth });
-  const rows = await getStickyMessages();
-  const existingIndex = rows.findIndex(row => row[1] === channelId);
-  if (existingIndex !== -1) {
-    await sheets.spreadsheets.values.clear({
-      spreadsheetId: process.env.GLUE_STICK_SPREADSHEET_ID,
-      range: `A${existingIndex + 2}:D${existingIndex + 2}`,
-    });
-  }
+  await pool.query('DELETE FROM sticky_messages WHERE channel_id = $1', [channelId]);
 }
 
 async function registerCommands() {
@@ -348,6 +344,7 @@ async function registerCommands() {
 
 client.once('clientReady', async () => {
   console.log(`Bot is online as ${client.user.tag}!`);
+  await initializeDatabase();
   await initializeLastProcessedRow();
   await registerCommands();
   
@@ -379,11 +376,10 @@ client.on('interactionCreate', async interaction => {
       await interaction.deferReply({ flags: 64 });
       const message = interaction.options.getString('message');
       const channel = interaction.channel;
-      const rows = await getStickyMessages();
-      const existing = rows.find(row => row[1] === channel.id);
-      if (existing && existing[3]) {
+      const existing = await getStickyByChannel(channel.id);
+      if (existing && existing.message_id) {
         try {
-          const oldMessage = await channel.messages.fetch(existing[3]);
+          const oldMessage = await channel.messages.fetch(existing.message_id);
           await oldMessage.delete();
         } catch (e) {}
       }
@@ -401,15 +397,14 @@ if (interaction.commandName === 'editstick') {
       await interaction.deferReply({ flags: 64 });
       const message = interaction.options.getString('message');
       const channel = interaction.channel;
-      const rows = await getStickyMessages();
-      const existing = rows.find(row => row[1] === channel.id);
+      const existing = await getStickyByChannel(channel.id);
       if (!existing) {
         await interaction.editReply({ content: 'No sticky message found in this channel!' });
         return;
       }
-      if (existing[3]) {
+      if (existing.message_id) {
         try {
-          const oldMessage = await channel.messages.fetch(existing[3]);
+          const oldMessage = await channel.messages.fetch(existing.message_id);
           await oldMessage.delete();
         } catch (e) {}
       }
@@ -425,15 +420,14 @@ if (interaction.commandName === 'editstick') {
     try {
       await interaction.deferReply({ flags: 64 });
       const channel = interaction.channel;
-      const rows = await getStickyMessages();
-      const existing = rows.find(row => row[1] === channel.id);
+      const existing = await getStickyByChannel(channel.id);
       if (!existing) {
         await interaction.editReply({ content: 'No sticky message found in this channel!' });
         return;
       }
-      if (existing[3]) {
+      if (existing.message_id) {
         try {
-          const oldMessage = await channel.messages.fetch(existing[3]);
+          const oldMessage = await channel.messages.fetch(existing.message_id);
           await oldMessage.delete();
         } catch (e) {}
       }
@@ -449,20 +443,19 @@ client.on('messageCreate', async message => {
   if (message.author.id === client.user.id) return;
   
   try {
-    const rows = await getStickyMessages();
-    const sticky = rows.find(row => row[1] === message.channelId);
+    const existing = await getStickyByChannel(message.channelId);
     
-    if (!sticky || !sticky[2]) return;
+    if (!existing || !existing.message) return;
     
-    if (sticky[3]) {
+    if (existing.message_id) {
       try {
-        const oldMessage = await message.channel.messages.fetch(sticky[3]);
+        const oldMessage = await message.channel.messages.fetch(existing.message_id);
         await oldMessage.delete();
       } catch (e) {}
     }
     
-    const sent = await message.channel.send(`${sticky[2]}`);
-    await saveStickyMessage(sticky[0], sticky[1], sticky[2], sent.id);
+    const sent = await message.channel.send(`${existing.message}`);
+    await saveStickyMessage(existing.channel_name, existing.channel_id, existing.message, sent.id);
   } catch (error) {
     console.error('Error reposting sticky message:', error);
   }
