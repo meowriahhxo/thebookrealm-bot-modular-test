@@ -337,12 +337,7 @@ client.on('interactionCreate', async interaction => {
     const startsAtTimestamp = Math.floor(startsAt / 1000);
     const announceEmoji = randomEmoji(type);
 
-    const embed = new EmbedBuilder()
-      .setColor(sprintColors[type])
-      .setTitle(`${announceEmoji} JOIN THE SPRINT ${announceEmoji}`)
-      .setDescription(`The next **${type}** runs for **${minutes} minutes** and will begin <t:${startsAtTimestamp}:R>.\n\nUse \`/join\` to join and \`/final\` if you have to leave early!`);
-
-    await interaction.reply({ embeds: [embed] });
+    await interaction.reply(`${announceEmoji} **JOIN THE SPRINT** ${announceEmoji}\n\nThe next **${type}** runs for **${minutes} minutes** and will begin <t:${startsAtTimestamp}:R>.\n\nUse \`/join\` to join and \`/final\` if you have to leave early!`);
 
     pendingSprints[channelId] = {
       type,
