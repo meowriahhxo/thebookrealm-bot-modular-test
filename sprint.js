@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 const client = new Client({
   intents: [
@@ -9,10 +9,17 @@ const client = new Client({
   ]
 });
 
+// =====================================
+// SPRINT STATE
+// =====================================
 const activeSprints = {};
 const pendingSprints = {};
 const cooldowns = {};
 
+// =====================================
+// CHANNEL → SPRINT TYPE MAPPING
+// Replace placeholders with real IDs when moving to main server
+// =====================================
 const channelSprintTypes = {
   [process.env.TALL_TOMES_CHANNEL_ID]: 'Tall Tomes Sprint',
   [process.env.SHORT_STACKS_CHANNEL_ID]: 'Short Stacks Sprint',
@@ -22,6 +29,9 @@ const channelSprintTypes = {
   [process.env.STUDY_CHANNEL_ID]: 'Study Sprint'
 };
 
+// =====================================
+// EMOJI POOLS PER SPRINT TYPE
+// =====================================
 const sprintEmojis = {
   'Tall Tomes Sprint': ['📚', '📖', '🔖', '🌙', '✨', '⭐'],
   'Short Stacks Sprint': ['📚', '📖', '🔖', '🌙', '✨', '⭐'],
@@ -31,6 +41,10 @@ const sprintEmojis = {
   'Study Sprint': ['📝', '📐', '💡', '🧠', '⭐', '🔍']
 };
 
+// =====================================
+// VERBS PER SPRINT TYPE
+// Used in end message ("amount of time you read/wrote/etc")
+// =====================================
 const sprintVerbs = {
   'Tall Tomes Sprint': 'read',
   'Short Stacks Sprint': 'read',
@@ -40,6 +54,10 @@ const sprintVerbs = {
   'Study Sprint': 'studied'
 };
 
+// =====================================
+// HAPPY VERBS PER SPRINT TYPE
+// Used in start sprinting message
+// =====================================
 const sprintHappyVerbs = {
   'Tall Tomes Sprint': 'Happy reading!',
   'Short Stacks Sprint': 'Happy reading!',
@@ -49,21 +67,20 @@ const sprintHappyVerbs = {
   'Study Sprint': 'Happy studying!'
 };
 
+// =====================================
+// FIXED DURATIONS
+// These sprint types always run for a set time
+// =====================================
 const fixedDurations = {
   'Short Stacks Sprint': 30,
   'Tall Tomes Sprint': 60,
   'Readathon Sprint': 60
 };
 
-const sprintColors = {
-  'Tall Tomes Sprint': 0x1a237e,
-  'Short Stacks Sprint': 0x42a5f5,
-  'Readathon Sprint': 0x7b1fa2,
-  'Writing Sprint': 0xe65100,
-  'Art Sprint': 0xe91e63,
-  'Study Sprint': 0x2e7d32
-};
-
+// =====================================
+// ROLE IDs PER SPRINT TYPE
+// Replace placeholders with real IDs when moving to main server
+// =====================================
 const sprintRoles = {
   'Tall Tomes Sprint': 'TALL_TOMES_ROLE_ID',
   'Short Stacks Sprint': 'SHORT_STACKS_ROLE_ID',
@@ -73,11 +90,13 @@ const sprintRoles = {
   'Study Sprint': 'STUDY_ROLE_ID'
 };
 
+//Picks a random emoji for the sprint type
 function randomEmoji(type) {
   const pool = sprintEmojis[type];
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
+//Checks if currently GMT or BST
 function isGMT() {
   const now = new Date();
   const jan = new Date(now.getFullYear(), 0, 1);
@@ -86,7 +105,11 @@ function isGMT() {
   return now.getTimezoneOffset() === stdOffset;
 }
 
-function parseTimeToUTC(timeStr) {
+// HELPER: Parse BST/GMT time and date to UTC
+// Accepts: "3:00PM", "15:00", "00:00"
+// Date format: "DD/MM/YYYY"
+
+function parseTimeToUTC(timeStr, dateStr = null) {
   const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
   if (!match) return null;
 
@@ -100,19 +123,32 @@ function parseTimeToUTC(timeStr) {
   }
 
   const offset = isGMT() ? 0 : 1;
-  const now = new Date();
-  const target = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hours - offset, minutes));
 
-  if (target <= now) target.setUTCDate(target.getUTCDate() + 1);
+  let year, month, day;
+  if (dateStr) {
+    const dateParts = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (!dateParts) return null;
+    day = parseInt(dateParts[1]);
+    month = parseInt(dateParts[2]) - 1;
+    year = parseInt(dateParts[3]);
+  } else {
+    const now = new Date();
+    year = now.getUTCFullYear();
+    month = now.getUTCMonth();
+    day = now.getUTCDate();
+  }
+
+  const target = new Date(Date.UTC(year, month, day, hours - offset, minutes));
+  if (!dateStr && target <= new Date()) target.setUTCDate(target.getUTCDate() + 1);
   return target;
 }
+
+// START SPRINT- Creates the active sprint and sets up timers
 
 async function startSprint(channelId, type, minutes, sprintNumber = null, carriedParticipants = []) {
   const channel = await client.channels.fetch(channelId);
   const endTime = Math.floor((Date.now() + minutes * 60 * 1000) / 1000);
   const sprintLabel = sprintNumber ? `Readathon Sprint #${sprintNumber}` : type;
-  const emoji = randomEmoji(type);
-  const happyVerb = sprintHappyVerbs[type];
 
   activeSprints[channelId] = {
     type,
@@ -124,6 +160,8 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
     finalTimes: {},
     submittedUsers: new Set(),
     sprintNumber,
+
+    // Timer - fires when sprint ends
     timer: setTimeout(async () => {
       const sprint = activeSprints[channelId];
       if (!sprint) return;
@@ -135,9 +173,10 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
         : 'everyone';
       const endEmoji = randomEmoji(type);
 
-      await channel.send(`${endEmoji} ${endEmoji} ${endEmoji} **TIME'S UP** ${endEmoji} ${endEmoji} ${endEmoji}\n${mentions}\nThis **${sprintLabel}** is over, please put in the amount of time you ${verb}. You have <t:${finalDeadline}:R> to put in your final count!`);
+      // TIME'S UP message
+      await channel.send(`${endEmoji} **THE SPRINT IS OVER** ${endEmoji}\n${mentions}\nThis **${sprintLabel}** is over, please put in the amount of time you ${verb}. You have <t:${finalDeadline}:R> to put in your final count!`);
 
-      // 2 minute reminder before window closes
+      // 2 minute reminder before window closes - posts after 3 mins
       sprint.reminderTimer = setTimeout(async () => {
         const unsubmitted = [...sprint.originalParticipants].filter(id => !sprint.submittedUsers.has(id));
         if (unsubmitted.length > 0) {
@@ -146,11 +185,16 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
         }
       }, 3 * 60 * 1000);
 
+      // Leaderboard posts after 5 mins if not all submitted
       sprint.finalTimer = setTimeout(() => postLeaderboard(channelId), 5 * 60 * 1000);
     }, minutes * 60 * 1000)
   };
 }
 
+// =====================================
+// POST SPRINT START MESSAGE
+// Fires when sprint actually begins (after countdown)
+// =====================================
 async function postSprintStart(channelId) {
   const sprint = activeSprints[channelId];
   if (!sprint) return;
@@ -167,6 +211,10 @@ async function postSprintStart(channelId) {
   await channel.send(`${emoji} **START SPRINTING** ${emoji}\n\nThe **${sprintLabel}** has begun. You have <t:${endTime}:R> to sprint, ending at <t:${endTime}:t>. ${happyVerb}\n\n✨ **Participants:**\n${mentions}`);
 }
 
+// =====================================
+// POST LEADERBOARD
+// Fires when all submit or 5 min window expires
+// =====================================
 async function postLeaderboard(channelId) {
   const sprint = activeSprints[channelId];
   if (!sprint) return;
@@ -175,7 +223,7 @@ async function postLeaderboard(channelId) {
   const sorted = Object.entries(sprint.finalTimes).sort((a, b) => b[1] - a[1]);
   const totalTime = sorted.reduce((sum, [, mins]) => sum + mins, 0);
 
-  let leaderboard = '🏆 **GREAT JOB EVERYONE**\n';
+  let leaderboard = '🏆 **GREAT JOB EVERYONE** 🏆\n';
   let currentRank = 1;
   let previousTime = null;
   let displayRank = 1;
@@ -196,7 +244,7 @@ async function postLeaderboard(channelId) {
   cooldowns[channelId] = Date.now() + 3 * 60 * 1000;
 
   leaderboard += `\nCombined time: **${totalTime} minutes** over **${sprint.duration} minutes**.\n`;
-  leaderboard += `\nThanks for joining us. You can use the /sprint command to start another <t:${cooldownTime}:R>!\n`;
+  leaderboard += `\nThanks for joining us. You can use the /sprint command to start another <t:${cooldownTime}:R>!\n\n`;
   leaderboard += `-# <@&${process.env.KEEPERS_ROLE_ID}> a sprint just ended, thank you!`;
 
   await channel.send(leaderboard);
@@ -207,8 +255,12 @@ async function postLeaderboard(channelId) {
   delete activeSprints[channelId];
 }
 
+// =====================================
+// REGISTER SLASH COMMANDS
+// =====================================
 async function registerCommands() {
   const commands = [
+    // /sprint [input] — e.g. "60 5" = 60 min sprint starting in 5 mins
     new SlashCommandBuilder()
       .setName('sprint')
       .setDescription('Start a sprint in this channel')
@@ -217,6 +269,8 @@ async function registerCommands() {
           .setDescription('Duration and start delay (e.g. "60 5" = 60 min sprint starting in 5 mins)')
           .setRequired(true))
       .toJSON(),
+
+    // /schedule — for Readathon sprints scheduled ahead of time
     new SlashCommandBuilder()
       .setName('schedule')
       .setDescription('Schedule a Readathon sprint')
@@ -230,21 +284,33 @@ async function registerCommands() {
           .setRequired(true))
       .addStringOption(opt =>
         opt.setName('time')
-          .setDescription('Start time in BST/GMT (e.g. 3:00PM or 15:00)')
+          .setDescription('Start time in BST/GMT (e.g. 3:00PM, 15:00, or 00:00)')
           .setRequired(true))
+      .addStringOption(opt =>
+        opt.setName('date')
+          .setDescription('Date in DD/MM/YYYY format (e.g. 02/05/2026). Leave blank for today.')
+          .setRequired(false))
       .toJSON(),
+
+    // /cancel — cancels active or pending sprint
     new SlashCommandBuilder()
       .setName('cancel')
       .setDescription('Cancel the active or upcoming sprint in this channel')
       .toJSON(),
+
+    // /join — join the active sprint
     new SlashCommandBuilder()
       .setName('join')
       .setDescription('Join the active sprint in this channel')
       .toJSON(),
+
+    // /time — check time remaining
     new SlashCommandBuilder()
       .setName('time')
       .setDescription('Check how much time is left in the sprint')
       .toJSON(),
+
+    // /final — submit time or leave early
     new SlashCommandBuilder()
       .setName('final')
       .setDescription('Submit your final time or leave the sprint early')
@@ -260,14 +326,21 @@ async function registerCommands() {
   console.log('Sprint commands registered!');
 }
 
+// =====================================
+// BOT READY
+// =====================================
 client.once('ready', async () => {
   console.log(`Sprint bot online as ${client.user.tag}!`);
   await registerCommands();
 });
 
+// =====================================
+// INTERACTION HANDLER
+// =====================================
 client.on('interactionCreate', async interaction => {
   const channelId = interaction.channelId;
 
+  // ---- BUTTON INTERACTIONS (cancel confirmation) ----
   if (interaction.isButton()) {
     if (interaction.customId === 'confirm_cancel') {
       const sprint = activeSprints[channelId] || pendingSprints[channelId];
@@ -278,6 +351,7 @@ client.on('interactionCreate', async interaction => {
       const roleId = sprintRoles[sprint.type];
       clearTimeout(sprint.timer);
       clearTimeout(sprint.pendingTimer);
+      clearTimeout(sprint.warningTimer);
       clearTimeout(sprint.finalTimer);
       clearTimeout(sprint.reminderTimer);
       delete activeSprints[channelId];
@@ -293,6 +367,7 @@ client.on('interactionCreate', async interaction => {
 
   if (!interaction.isChatInputCommand()) return;
 
+  // ---- /sprint ----
   if (interaction.commandName === 'sprint') {
     const type = channelSprintTypes[channelId];
     if (!type) {
@@ -352,6 +427,7 @@ client.on('interactionCreate', async interaction => {
     };
   }
 
+  // ---- /schedule ----
   if (interaction.commandName === 'schedule') {
     const type = channelSprintTypes[channelId];
     if (!type) {
@@ -362,10 +438,11 @@ client.on('interactionCreate', async interaction => {
     const number = interaction.options.getInteger('number');
     const minutes = interaction.options.getInteger('minutes');
     const timeStr = interaction.options.getString('time');
+    const dateStr = interaction.options.getString('date');
 
-    const startTime = parseTimeToUTC(timeStr);
+    const startTime = parseTimeToUTC(timeStr, dateStr);
     if (!startTime) {
-      await interaction.reply({ content: 'Invalid time format! Please use something like `3:00PM` or `15:00`.', ephemeral: true });
+      await interaction.reply({ content: 'Invalid time or date format! Use time like `3:00PM` or `15:00`, and date like `02/05/2026`.', ephemeral: true });
       return;
     }
 
@@ -375,19 +452,26 @@ client.on('interactionCreate', async interaction => {
 
     await interaction.reply(`✅ Readathon Sprint #${number} scheduled for <t:${startTimestamp}:t>! A reminder will be posted 15 minutes before.`);
 
-    if (msUntilWarning > 0) {
-      setTimeout(async () => {
+    pendingSprints[channelId] = {
+      type: 'Readathon Sprint',
+      duration: minutes,
+      startsAt: startTime.getTime(),
+      participants: [],
+      warningTimer: msUntilWarning > 0 ? setTimeout(async () => {
         const channel = await client.channels.fetch(channelId);
         await channel.send(`<@&${process.env.READATHON_ROLE_ID}> Readathon Sprint #${number} is starting in 15 minutes! Use /join to read with us!`);
-      }, msUntilWarning);
-    }
-
-    setTimeout(async () => {
-      await startSprint(channelId, 'Readathon Sprint', minutes, number);
-      await postSprintStart(channelId);
-    }, msUntilStart);
+      }, msUntilWarning) : null,
+      pendingTimer: setTimeout(async () => {
+        const pending = pendingSprints[channelId];
+        const carriedParticipants = pending ? [...pending.participants] : [];
+        delete pendingSprints[channelId];
+        await startSprint(channelId, 'Readathon Sprint', minutes, number, carriedParticipants);
+        await postSprintStart(channelId);
+      }, msUntilStart)
+    };
   }
 
+  // ---- /cancel ----
   if (interaction.commandName === 'cancel') {
     const sprint = activeSprints[channelId] || pendingSprints[channelId];
     if (!sprint) {
@@ -414,6 +498,7 @@ client.on('interactionCreate', async interaction => {
     } else {
       clearTimeout(sprint.timer);
       clearTimeout(sprint.pendingTimer);
+      clearTimeout(sprint.warningTimer);
       clearTimeout(sprint.finalTimer);
       clearTimeout(sprint.reminderTimer);
       delete activeSprints[channelId];
@@ -424,6 +509,7 @@ client.on('interactionCreate', async interaction => {
     }
   }
 
+  // ---- /join ----
   if (interaction.commandName === 'join') {
     const sprint = activeSprints[channelId] || pendingSprints[channelId];
     if (!sprint) {
@@ -451,6 +537,7 @@ client.on('interactionCreate', async interaction => {
     await interaction.reply(`<@${interaction.user.id}> has joined the **${sprint.type}**!`);
   }
 
+  // ---- /time ----
   if (interaction.commandName === 'time') {
     if (!activeSprints[channelId] && !pendingSprints[channelId]) {
       await interaction.reply({ content: `There isn't a sprint running in this channel. To start one, use the /sprint command!`, ephemeral: true });
@@ -469,6 +556,7 @@ client.on('interactionCreate', async interaction => {
     await interaction.reply(`There are <t:${endTime}:R> left in this sprint! It ends at <t:${endTime}:t>.`);
   }
 
+  // ---- /final ----
   if (interaction.commandName === 'final') {
     const minutes = interaction.options.getInteger('minutes');
 
@@ -499,4 +587,7 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
+// =====================================
+// LOGIN
+// =====================================
 client.login(process.env.DISCORD_TOKEN);
