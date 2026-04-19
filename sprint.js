@@ -572,7 +572,7 @@ client.on('interactionCreate', async interaction => {
     if (!wasParticipant) {
       await interaction.reply({ content: `You didn't join this sprint, but if you were reading along, you're welcome to submit your time. Please be honest and share the amount of time you ${verb} during this sprint!`, ephemeral: true });
     } else {
-      await interaction.reply({ content: `You have logged **${minutes} minutes** for this sprint!`, ephemeral: true });
+      await interaction.reply(`<@${interaction.user.id}> has logged **${minutes} minutes**!`);
     }
 
     sprint.finalTimes[interaction.user.id] = minutes;
