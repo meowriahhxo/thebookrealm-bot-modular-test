@@ -107,22 +107,20 @@ function parseTimeToUTC(timeStr) {
   return target;
 }
 
-async function startSprint(channelId, type, minutes, sprintNumber = null) {
+async function startSprint(channelId, type, minutes, sprintNumber = null, carriedParticipants = []) {
   const channel = await client.channels.fetch(channelId);
   const endTime = Math.floor((Date.now() + minutes * 60 * 1000) / 1000);
   const sprintLabel = sprintNumber ? `Readathon Sprint #${sprintNumber}` : type;
   const emoji = randomEmoji(type);
   const happyVerb = sprintHappyVerbs[type];
 
-  await channel.send(`${emoji} **SPRINT STARTED** ${emoji}\n\nA **${sprintLabel}** has started! There are <t:${endTime}:R> left, ending at <t:${endTime}:t>.\n\nUse \`/join\` to join and \`/final\` if you have to leave early!`);
-
   activeSprints[channelId] = {
     type,
     duration: minutes,
     startTime: Date.now(),
     endTime: Date.now() + minutes * 60 * 1000,
-    participants: [],
-    originalParticipants: new Set(),
+    participants: [...carriedParticipants],
+    originalParticipants: new Set(carriedParticipants),
     finalTimes: {},
     submittedUsers: new Set(),
     sprintNumber,
@@ -166,7 +164,7 @@ async function postSprintStart(channelId) {
     ? sprint.participants.map(id => `<@${id}>`).join(', ')
     : '';
 
-  await channel.send(`${emoji} **START SPRINTING** ${emoji}\n\nThe **${sprintLabel}** has begun. You have <t:${endTime}:R> to sprint, ending at <t:${endTime}:t>. ${happyVerb}\n\n✨ Participants:\n${mentions}`);
+  await channel.send(`${emoji} **START SPRINTING** ${emoji}\n\nThe **${sprintLabel}** has begun. You have <t:${endTime}:R> to sprint, ending at <t:${endTime}:t>. ${happyVerb}\n\n✨ **Participants:**\n${mentions}`);
 }
 
 async function postLeaderboard(channelId) {
@@ -345,8 +343,10 @@ client.on('interactionCreate', async interaction => {
       startsAt,
       participants: [],
       pendingTimer: setTimeout(async () => {
+        const pending = pendingSprints[channelId];
+        const carriedParticipants = pending ? [...pending.participants] : [];
         delete pendingSprints[channelId];
-        await startSprint(channelId, type, minutes);
+        await startSprint(channelId, type, minutes, null, carriedParticipants);
         await postSprintStart(channelId);
       }, startsIn * 60 * 1000)
     };
