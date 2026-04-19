@@ -183,16 +183,16 @@ async function registerCommands() {
       .setName('sprint')
       .setDescription('Start a sprint in this channel')
       .addIntegerOption(opt =>
-        opt.setName('starts_in')
-          .setDescription('How many minutes until the sprint starts')
-          .setRequired(true)
-          .setMinValue(1)
-          .setMaxValue(60))
-      .addIntegerOption(opt =>
         opt.setName('minutes')
           .setDescription('Duration in minutes (Writing/Art/Study only: 15-60)')
           .setRequired(false)
           .setMinValue(15)
+          .setMaxValue(60))
+      .addIntegerOption(opt =>
+        opt.setName('starts_in')
+          .setDescription('How many minutes until the sprint starts')
+          .setRequired(true)
+          .setMinValue(1)
           .setMaxValue(60))
       .toJSON(),
     new SlashCommandBuilder()
