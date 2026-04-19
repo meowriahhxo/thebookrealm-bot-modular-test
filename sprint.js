@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 const client = new Client({
   intents: [
@@ -10,8 +10,31 @@ const client = new Client({
 });
 
 const activeSprints = {};
+const pendingSprints = {};
 const cooldowns = {};
-const scheduledSprints = {};
+
+const channelSprintTypes = {
+  'TALL_TOMES_CHANNEL_ID': 'Tall Tomes Sprint',
+  'SHORT_STACKS_CHANNEL_ID': 'Short Stacks Sprint',
+  'READATHON_CHANNEL_ID': 'Readathon Sprint',
+  'WRITING_CHANNEL_ID': 'Writing Sprint',
+  'ART_CHANNEL_ID': 'Art Sprint',
+  'STUDY_CHANNEL_ID': 'Study Sprint'
+};
+
+const sprintEmojis = {
+  'Tall Tomes Sprint': ['📚', '📖', '🔖', '🌙', '✨', '⭐'],
+  'Short Stacks Sprint': ['📚', '📖', '🔖', '🌙', '✨', '⭐'],
+  'Readathon Sprint': ['📚', '📖', '🔖', '🌙', '✨', '⭐'],
+  'Writing Sprint': ['✍️', '📝', '💫', '🖊️', '🌙', '⭐'],
+  'Art Sprint': ['🎨', '🖌️', '✨', '🌈', '💫', '🎭'],
+  'Study Sprint': ['📝', '📐', '💡', '🧠', '⭐', '🔍']
+};
+
+function randomEmoji(type) {
+  const pool = sprintEmojis[type];
+  return pool[Math.floor(Math.random() * pool.length)];
+}
 
 const sprintVerbs = {
   'Tall Tomes Sprint': 'read',
@@ -26,6 +49,24 @@ const fixedDurations = {
   'Short Stacks Sprint': 30,
   'Tall Tomes Sprint': 60,
   'Readathon Sprint': 60
+};
+
+const sprintColors = {
+  'Tall Tomes Sprint': 0x1a237e,
+  'Short Stacks Sprint': 0x42a5f5,
+  'Readathon Sprint': 0x7b1fa2,
+  'Writing Sprint': 0xe65100,
+  'Art Sprint': 0xe91e63,
+  'Study Sprint': 0x2e7d32
+};
+
+const sprintRoles = {
+  'Tall Tomes Sprint': 'TALL_TOMES_ROLE_ID',
+  'Short Stacks Sprint': 'SHORT_STACKS_ROLE_ID',
+  'Readathon Sprint': process.env.READATHON_ROLE_ID,
+  'Writing Sprint': 'WRITING_ROLE_ID',
+  'Art Sprint': 'ART_ROLE_ID',
+  'Study Sprint': 'STUDY_ROLE_ID'
 };
 
 function isGMT() {
@@ -60,9 +101,15 @@ function parseTimeToUTC(timeStr) {
 async function startSprint(channelId, type, minutes, sprintNumber = null) {
   const channel = await client.channels.fetch(channelId);
   const endTime = Math.floor((Date.now() + minutes * 60 * 1000) / 1000);
+  const sprintLabel = sprintNumber ? `Readathon Sprint #${sprintNumber}` : type;
+  const emoji = randomEmoji(type);
 
-  const sprintLabel = sprintNumber ? `Readathon Sprint #${sprintNumber}` : `**${type}**`;
-  await channel.send(`A ${sprintLabel} has started. There are **${minutes} minutes** left in this sprint, and it ends at <t:${endTime}:t>. Use /join to join and /final if you have to leave early!`);
+  const embed = new EmbedBuilder()
+    .setColor(sprintColors[type])
+    .setTitle(`${emoji} SPRINT STARTED ${emoji}`)
+    .setDescription(`A **${sprintLabel}** has started! There are **${minutes} minutes** left, ending at <t:${endTime}:t>.\n\nUse \`/join\` to join and \`/final\` if you have to leave early!`);
+
+  await channel.send({ embeds: [embed] });
 
   activeSprints[channelId] = {
     type,
@@ -82,8 +129,9 @@ async function startSprint(channelId, type, minutes, sprintNumber = null) {
       const mentions = sprint.participants.length > 0
         ? sprint.participants.map(id => `<@${id}>`).join(', ')
         : 'everyone';
+      const endEmoji = randomEmoji(type);
 
-      await channel.send(`${mentions}\nThis **${sprint.type}** is over, please put in the amount of time you ${verb}. You have <t:${finalDeadline}:R> to put in your final count!`);
+      await channel.send(`${endEmoji} ${endEmoji} ${endEmoji} **TIME'S UP** ${endEmoji} ${endEmoji} ${endEmoji}\n${mentions}\nThis **${sprintLabel}** is over, please put in the amount of time you ${verb}. You have <t:${finalDeadline}:R> to put in your final count!`);
 
       sprint.finalTimer = setTimeout(() => postLeaderboard(channelId), 5 * 60 * 1000);
     }, minutes * 60 * 1000)
@@ -134,21 +182,15 @@ async function registerCommands() {
     new SlashCommandBuilder()
       .setName('sprint')
       .setDescription('Start a sprint in this channel')
-      .addStringOption(opt =>
-        opt.setName('type')
-          .setDescription('Type of sprint')
+      .addIntegerOption(opt =>
+        opt.setName('starts_in')
+          .setDescription('How many minutes until the sprint starts')
           .setRequired(true)
-          .addChoices(
-            { name: 'Tall Tomes Sprint', value: 'Tall Tomes Sprint' },
-            { name: 'Short Stacks Sprint', value: 'Short Stacks Sprint' },
-            { name: 'Readathon Sprint', value: 'Readathon Sprint' },
-            { name: 'Writing Sprint', value: 'Writing Sprint' },
-            { name: 'Art Sprint', value: 'Art Sprint' },
-            { name: 'Study Sprint', value: 'Study Sprint' }
-          ))
+          .setMinValue(1)
+          .setMaxValue(60))
       .addIntegerOption(opt =>
         opt.setName('minutes')
-          .setDescription('Minutes to sprint (Writing/Art/Study only: 15-60)')
+          .setDescription('Duration in minutes (Writing/Art/Study only: 15-60)')
           .setRequired(false)
           .setMinValue(15)
           .setMaxValue(60))
@@ -168,6 +210,10 @@ async function registerCommands() {
         opt.setName('time')
           .setDescription('Start time in BST/GMT (e.g. 3:00PM or 15:00)')
           .setRequired(true))
+      .toJSON(),
+    new SlashCommandBuilder()
+      .setName('cancel')
+      .setDescription('Cancel the active or upcoming sprint in this channel')
       .toJSON(),
     new SlashCommandBuilder()
       .setName('join')
@@ -198,15 +244,46 @@ client.once('ready', async () => {
 });
 
 client.on('interactionCreate', async interaction => {
-  if (!interaction.isChatInputCommand()) return;
-
   const channelId = interaction.channelId;
 
+  if (interaction.isButton()) {
+    if (interaction.customId === 'confirm_cancel') {
+      const sprint = activeSprints[channelId] || pendingSprints[channelId];
+      if (!sprint) {
+        await interaction.update({ content: 'No sprint to cancel!', components: [] });
+        return;
+      }
+      const roleId = sprintRoles[sprint.type];
+      clearTimeout(sprint.timer);
+      clearTimeout(sprint.pendingTimer);
+      clearTimeout(sprint.finalTimer);
+      delete activeSprints[channelId];
+      delete pendingSprints[channelId];
+      await interaction.update({ content: `The **${sprint.type}** has been cancelled. <@&${roleId}>`, components: [] });
+    }
+
+    if (interaction.customId === 'deny_cancel') {
+      await interaction.update({ content: 'Cancel aborted — sprint continues!', components: [] });
+    }
+    return;
+  }
+
+  if (!interaction.isChatInputCommand()) return;
+
   if (interaction.commandName === 'sprint') {
-    if (activeSprints[channelId]) {
-      const sprint = activeSprints[channelId];
-      const timeRemaining = Math.ceil((sprint.endTime - Date.now()) / 60000);
-      await interaction.reply({ content: `There's a sprint running in this channel, you can join as long as there's more than **5 minutes** remaining! There are currently **${timeRemaining} minutes** left.`, ephemeral: true });
+    const type = channelSprintTypes[channelId];
+    if (!type) {
+      await interaction.reply({ content: 'This channel isn\'t set up for sprints!', ephemeral: true });
+      return;
+    }
+
+    if (activeSprints[channelId] || pendingSprints[channelId]) {
+      const sprint = activeSprints[channelId] || pendingSprints[channelId];
+      const timeRemaining = activeSprints[channelId]
+        ? Math.ceil((sprint.endTime - Date.now()) / 60000)
+        : Math.ceil((sprint.startsAt - Date.now()) / 60000);
+      const label = activeSprints[channelId] ? 'running' : 'starting soon';
+      await interaction.reply({ content: `There's a sprint ${label} in this channel! There are currently **${timeRemaining} minutes** remaining.`, ephemeral: true });
       return;
     }
 
@@ -216,31 +293,50 @@ client.on('interactionCreate', async interaction => {
       return;
     }
 
-    const type = interaction.options.getString('type');
+    const startsIn = interaction.options.getInteger('starts_in');
     const inputMinutes = interaction.options.getInteger('minutes');
 
+    let minutes;
     if (fixedDurations[type]) {
-      if (inputMinutes && inputMinutes !== fixedDurations[type]) {
-        await interaction.reply({ content: `**${type}** is always **${fixedDurations[type]} minutes**!`, ephemeral: true });
-        return;
-      }
-      await interaction.deferReply();
-      await startSprint(channelId, type, fixedDurations[type]);
-      await interaction.deleteReply();
+      minutes = fixedDurations[type];
     } else {
       if (!inputMinutes) {
         await interaction.reply({ content: `Please provide a duration between 15 and 60 minutes for a **${type}**!`, ephemeral: true });
         return;
       }
-      await interaction.deferReply();
-      await startSprint(channelId, type, inputMinutes);
-      await interaction.deleteReply();
+      minutes = inputMinutes;
     }
 
-    activeSprints[channelId].participants.push(interaction.user.id);
+    const startsAt = Date.now() + startsIn * 60 * 1000;
+    const startsAtTimestamp = Math.floor(startsAt / 1000);
+    const announceEmoji = randomEmoji(type);
+
+    const embed = new EmbedBuilder()
+      .setColor(sprintColors[type])
+      .setTitle(`${announceEmoji} JOIN THE SPRINT ${announceEmoji}`)
+      .setDescription(`The next **${type}** runs for **${minutes} minutes** and will begin <t:${startsAtTimestamp}:R>.\n\nUse \`/join\` to join and \`/final\` if you have to leave early!`);
+
+    await interaction.reply({ embeds: [embed] });
+
+    pendingSprints[channelId] = {
+      type,
+      duration: minutes,
+      startsAt,
+      participants: [],
+      pendingTimer: setTimeout(async () => {
+        delete pendingSprints[channelId];
+        await startSprint(channelId, type, minutes);
+      }, startsIn * 60 * 1000)
+    };
   }
 
   if (interaction.commandName === 'schedule') {
+    const type = channelSprintTypes[channelId];
+    if (!type) {
+      await interaction.reply({ content: 'This channel isn\'t set up for sprints!', ephemeral: true });
+      return;
+    }
+
     const number = interaction.options.getInteger('number');
     const minutes = interaction.options.getInteger('minutes');
     const timeStr = interaction.options.getString('time');
@@ -269,18 +365,54 @@ client.on('interactionCreate', async interaction => {
     }, msUntilStart);
   }
 
+  if (interaction.commandName === 'cancel') {
+    const sprint = activeSprints[channelId] || pendingSprints[channelId];
+    if (!sprint) {
+      await interaction.reply({ content: `There isn't a sprint running or scheduled in this channel.`, ephemeral: true });
+      return;
+    }
+
+    if (sprint.participants && sprint.participants.length > 0) {
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('confirm_cancel')
+          .setLabel('Yes, cancel it')
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId('deny_cancel')
+          .setLabel('No, keep it going')
+          .setStyle(ButtonStyle.Secondary)
+      );
+
+      await interaction.reply({
+        content: `Are you sure you want to cancel? **${sprint.participants.length} ${sprint.participants.length === 1 ? 'person has' : 'people have'}** joined this sprint.`,
+        components: [row]
+      });
+    } else {
+      clearTimeout(sprint.timer);
+      clearTimeout(sprint.pendingTimer);
+      clearTimeout(sprint.finalTimer);
+      delete activeSprints[channelId];
+      delete pendingSprints[channelId];
+
+      const roleId = sprintRoles[sprint.type];
+      await interaction.reply(`The **${sprint.type}** has been cancelled. <@&${roleId}>`);
+    }
+  }
+
   if (interaction.commandName === 'join') {
-    if (!activeSprints[channelId]) {
+    const sprint = activeSprints[channelId] || pendingSprints[channelId];
+    if (!sprint) {
       await interaction.reply({ content: `There isn't a sprint running in this channel. To start one, use the /sprint command!`, ephemeral: true });
       return;
     }
 
-    const sprint = activeSprints[channelId];
-    const timeRemaining = (sprint.endTime - Date.now()) / 60000;
-
-    if (timeRemaining < 5) {
-      await interaction.reply({ content: `Less than 5 minutes are remaining, join us for the next one!`, ephemeral: true });
-      return;
+    if (activeSprints[channelId]) {
+      const timeRemaining = (sprint.endTime - Date.now()) / 60000;
+      if (timeRemaining < 5) {
+        await interaction.reply({ content: `Less than 5 minutes are remaining, join us for the next one!`, ephemeral: true });
+        return;
+      }
     }
 
     if (sprint.participants.includes(interaction.user.id)) {
@@ -293,8 +425,15 @@ client.on('interactionCreate', async interaction => {
   }
 
   if (interaction.commandName === 'time') {
-    if (!activeSprints[channelId]) {
+    if (!activeSprints[channelId] && !pendingSprints[channelId]) {
       await interaction.reply({ content: `There isn't a sprint running in this channel. To start one, use the /sprint command!`, ephemeral: true });
+      return;
+    }
+
+    if (pendingSprints[channelId] && !activeSprints[channelId]) {
+      const sprint = pendingSprints[channelId];
+      const startsAt = Math.floor(sprint.startsAt / 1000);
+      await interaction.reply({ content: `The **${sprint.type}** hasn't started yet! It begins <t:${startsAt}:R>.`, ephemeral: true });
       return;
     }
 
@@ -308,7 +447,7 @@ client.on('interactionCreate', async interaction => {
     const minutes = interaction.options.getInteger('minutes');
 
     if (!activeSprints[channelId]) {
-      await interaction.reply({ content: `There isn't a sprint running in this channel. To start one, use the /sprint command!`, ephemeral: true });
+      await interaction.reply({ content: `There isn't an active sprint in this channel right now.`, ephemeral: true });
       return;
     }
 
