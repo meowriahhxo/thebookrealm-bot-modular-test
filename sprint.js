@@ -182,18 +182,10 @@ async function registerCommands() {
     new SlashCommandBuilder()
       .setName('sprint')
       .setDescription('Start a sprint in this channel')
-      .addIntegerOption(opt =>
-        opt.setName('minutes')
-          .setDescription('Duration in minutes (Writing/Art/Study only: 15-60)')
-          .setRequired(false)
-          .setMinValue(15)
-          .setMaxValue(60))
-      .addIntegerOption(opt =>
-        opt.setName('starts_in')
-          .setDescription('How many minutes until the sprint starts')
-          .setRequired(true)
-          .setMinValue(1)
-          .setMaxValue(60))
+      .addStringOption(opt =>
+        opt.setName('input')
+          .setDescription('Duration and start delay (e.g. "60 5" = 60 min sprint in 5 mins)')
+          .setRequired(true))
       .toJSON(),
     new SlashCommandBuilder()
       .setName('schedule')
@@ -293,8 +285,9 @@ client.on('interactionCreate', async interaction => {
       return;
     }
 
-    const startsIn = interaction.options.getInteger('starts_in');
-    const inputMinutes = interaction.options.getInteger('minutes');
+    const input = interaction.options.getString('input').trim().split(/\s+/);
+const inputMinutes = parseInt(input[0]);
+const startsIn = parseInt(input[1]) || 1;
 
     let minutes;
     if (fixedDurations[type]) {
