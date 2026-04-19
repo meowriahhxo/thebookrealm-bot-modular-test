@@ -466,7 +466,7 @@ client.on('interactionCreate', async interaction => {
 
     const sprint = activeSprints[channelId];
     const endTime = Math.floor(sprint.endTime / 1000);
-    await interaction.reply({ content: `There are <t:${endTime}:R> left in this sprint! It ends at <t:${endTime}:t>.`, ephemeral: true });
+    await interaction.reply(`There are <t:${endTime}:R> left in this sprint! It ends at <t:${endTime}:t>.`);
   }
 
   if (interaction.commandName === 'final') {
