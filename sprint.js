@@ -340,7 +340,7 @@ async function registerCommands() {
 // =====================================
 // BOT READY
 // =====================================
-client.once('ready', async () => {
+client.once('clientReady', async () => {
   console.log(`Sprint bot online as ${client.user.tag}!`);
   await registerCommands();
 });
