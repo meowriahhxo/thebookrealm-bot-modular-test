@@ -31,11 +31,6 @@ const sprintEmojis = {
   'Study Sprint': ['📝', '📐', '💡', '🧠', '⭐', '🔍']
 };
 
-function randomEmoji(type) {
-  const pool = sprintEmojis[type];
-  return pool[Math.floor(Math.random() * pool.length)];
-}
-
 const sprintVerbs = {
   'Tall Tomes Sprint': 'read',
   'Short Stacks Sprint': 'read',
@@ -43,6 +38,15 @@ const sprintVerbs = {
   'Writing Sprint': 'wrote',
   'Art Sprint': 'created',
   'Study Sprint': 'studied'
+};
+
+const sprintHappyVerbs = {
+  'Tall Tomes Sprint': 'Happy reading!',
+  'Short Stacks Sprint': 'Happy reading!',
+  'Readathon Sprint': 'Happy reading!',
+  'Writing Sprint': 'Happy writing!',
+  'Art Sprint': 'Happy creating!',
+  'Study Sprint': 'Happy studying!'
 };
 
 const fixedDurations = {
@@ -68,6 +72,11 @@ const sprintRoles = {
   'Art Sprint': 'ART_ROLE_ID',
   'Study Sprint': 'STUDY_ROLE_ID'
 };
+
+function randomEmoji(type) {
+  const pool = sprintEmojis[type];
+  return pool[Math.floor(Math.random() * pool.length)];
+}
 
 function isGMT() {
   const now = new Date();
@@ -103,11 +112,12 @@ async function startSprint(channelId, type, minutes, sprintNumber = null) {
   const endTime = Math.floor((Date.now() + minutes * 60 * 1000) / 1000);
   const sprintLabel = sprintNumber ? `Readathon Sprint #${sprintNumber}` : type;
   const emoji = randomEmoji(type);
+  const happyVerb = sprintHappyVerbs[type];
 
   const embed = new EmbedBuilder()
     .setColor(sprintColors[type])
     .setTitle(`${emoji} SPRINT STARTED ${emoji}`)
-    .setDescription(`A **${sprintLabel}** has started! There are **${minutes} minutes** left, ending at <t:${endTime}:t>.\n\nUse \`/join\` to join and \`/final\` if you have to leave early!`);
+    .setDescription(`A **${sprintLabel}** has started! There are <t:${endTime}:R> left, ending at <t:${endTime}:t>.\n\nUse \`/join\` to join and \`/final\` if you have to leave early!`);
 
   await channel.send({ embeds: [embed] });
 
@@ -117,6 +127,7 @@ async function startSprint(channelId, type, minutes, sprintNumber = null) {
     startTime: Date.now(),
     endTime: Date.now() + minutes * 60 * 1000,
     participants: [],
+    originalParticipants: new Set(),
     finalTimes: {},
     submittedUsers: new Set(),
     sprintNumber,
@@ -133,9 +144,34 @@ async function startSprint(channelId, type, minutes, sprintNumber = null) {
 
       await channel.send(`${endEmoji} ${endEmoji} ${endEmoji} **TIME'S UP** ${endEmoji} ${endEmoji} ${endEmoji}\n${mentions}\nThis **${sprintLabel}** is over, please put in the amount of time you ${verb}. You have <t:${finalDeadline}:R> to put in your final count!`);
 
+      // 2 minute reminder before window closes
+      sprint.reminderTimer = setTimeout(async () => {
+        const unsubmitted = [...sprint.originalParticipants].filter(id => !sprint.submittedUsers.has(id));
+        if (unsubmitted.length > 0) {
+          const reminderMentions = unsubmitted.map(id => `<@${id}>`).join(', ');
+          await channel.send(`⏰ Reminder: ${reminderMentions} — you have 2 minutes left to submit your final time with \`/final\`!`);
+        }
+      }, 3 * 60 * 1000);
+
       sprint.finalTimer = setTimeout(() => postLeaderboard(channelId), 5 * 60 * 1000);
     }, minutes * 60 * 1000)
   };
+}
+
+async function postSprintStart(channelId) {
+  const sprint = activeSprints[channelId];
+  if (!sprint) return;
+
+  const channel = await client.channels.fetch(channelId);
+  const emoji = randomEmoji(sprint.type);
+  const happyVerb = sprintHappyVerbs[sprint.type];
+  const endTime = Math.floor(sprint.endTime / 1000);
+  const sprintLabel = sprint.sprintNumber ? `Readathon Sprint #${sprint.sprintNumber}` : sprint.type;
+  const mentions = sprint.participants.length > 0
+    ? sprint.participants.map(id => `<@${id}>`).join(', ')
+    : '';
+
+  await channel.send(`${emoji} **START SPRINTING** ${emoji}\n\nThe **${sprintLabel}** has begun. You have <t:${endTime}:R> to sprint, ending at <t:${endTime}:t>. ${happyVerb}\n\n✨ Participants:\n${mentions}`);
 }
 
 async function postLeaderboard(channelId) {
@@ -174,6 +210,7 @@ async function postLeaderboard(channelId) {
 
   clearTimeout(sprint.timer);
   clearTimeout(sprint.finalTimer);
+  clearTimeout(sprint.reminderTimer);
   delete activeSprints[channelId];
 }
 
@@ -184,7 +221,7 @@ async function registerCommands() {
       .setDescription('Start a sprint in this channel')
       .addStringOption(opt =>
         opt.setName('input')
-          .setDescription('Duration and start delay (e.g. "60 5" = 60 min sprint in 5 mins)')
+          .setDescription('Duration and start delay (e.g. "60 5" = 60 min sprint starting in 5 mins)')
           .setRequired(true))
       .toJSON(),
     new SlashCommandBuilder()
@@ -249,6 +286,7 @@ client.on('interactionCreate', async interaction => {
       clearTimeout(sprint.timer);
       clearTimeout(sprint.pendingTimer);
       clearTimeout(sprint.finalTimer);
+      clearTimeout(sprint.reminderTimer);
       delete activeSprints[channelId];
       delete pendingSprints[channelId];
       await interaction.update({ content: `The **${sprint.type}** has been cancelled. <@&${roleId}>`, components: [] });
@@ -286,14 +324,14 @@ client.on('interactionCreate', async interaction => {
     }
 
     const input = interaction.options.getString('input').trim().split(/\s+/);
-const inputMinutes = parseInt(input[0]);
-const startsIn = parseInt(input[1]) || 1;
+    const inputMinutes = parseInt(input[0]);
+    const startsIn = parseInt(input[1]) || 1;
 
     let minutes;
     if (fixedDurations[type]) {
       minutes = fixedDurations[type];
     } else {
-      if (!inputMinutes) {
+      if (!inputMinutes || inputMinutes < 15 || inputMinutes > 60) {
         await interaction.reply({ content: `Please provide a duration between 15 and 60 minutes for a **${type}**!`, ephemeral: true });
         return;
       }
@@ -319,6 +357,7 @@ const startsIn = parseInt(input[1]) || 1;
       pendingTimer: setTimeout(async () => {
         delete pendingSprints[channelId];
         await startSprint(channelId, type, minutes);
+        await postSprintStart(channelId);
       }, startsIn * 60 * 1000)
     };
   }
@@ -355,6 +394,7 @@ const startsIn = parseInt(input[1]) || 1;
 
     setTimeout(async () => {
       await startSprint(channelId, 'Readathon Sprint', minutes, number);
+      await postSprintStart(channelId);
     }, msUntilStart);
   }
 
@@ -385,6 +425,7 @@ const startsIn = parseInt(input[1]) || 1;
       clearTimeout(sprint.timer);
       clearTimeout(sprint.pendingTimer);
       clearTimeout(sprint.finalTimer);
+      clearTimeout(sprint.reminderTimer);
       delete activeSprints[channelId];
       delete pendingSprints[channelId];
 
@@ -414,6 +455,9 @@ const startsIn = parseInt(input[1]) || 1;
     }
 
     sprint.participants.push(interaction.user.id);
+    if (activeSprints[channelId]) {
+      sprint.originalParticipants.add(interaction.user.id);
+    }
     await interaction.reply(`<@${interaction.user.id}> has joined the **${sprint.type}**!`);
   }
 
@@ -431,9 +475,8 @@ const startsIn = parseInt(input[1]) || 1;
     }
 
     const sprint = activeSprints[channelId];
-    const timeRemaining = Math.ceil((sprint.endTime - Date.now()) / 60000);
     const endTime = Math.floor(sprint.endTime / 1000);
-    await interaction.reply({ content: `There are **${timeRemaining} minutes** left in this sprint! It ends at <t:${endTime}:t>.`, ephemeral: true });
+    await interaction.reply({ content: `There are <t:${endTime}:R> left in this sprint! It ends at <t:${endTime}:t>.`, ephemeral: true });
   }
 
   if (interaction.commandName === 'final') {
@@ -446,8 +489,9 @@ const startsIn = parseInt(input[1]) || 1;
 
     const sprint = activeSprints[channelId];
     const verb = sprintVerbs[sprint.type];
+    const wasParticipant = sprint.originalParticipants.has(interaction.user.id) || sprint.participants.includes(interaction.user.id);
 
-    if (!sprint.participants.includes(interaction.user.id) && !sprint.submittedUsers.has(interaction.user.id)) {
+    if (!wasParticipant) {
       await interaction.reply({ content: `You didn't join this sprint, but if you were reading along, you're welcome to submit your time. Please be honest and share the amount of time you ${verb} during this sprint!`, ephemeral: true });
     } else {
       await interaction.reply({ content: `You have logged **${minutes} minutes** for this sprint!`, ephemeral: true });
@@ -455,9 +499,10 @@ const startsIn = parseInt(input[1]) || 1;
 
     sprint.finalTimes[interaction.user.id] = minutes;
     sprint.submittedUsers.add(interaction.user.id);
+    sprint.originalParticipants.add(interaction.user.id);
     sprint.participants = sprint.participants.filter(id => id !== interaction.user.id);
 
-    const allSubmitted = sprint.participants.every(id => sprint.submittedUsers.has(id));
+    const allSubmitted = [...sprint.originalParticipants].every(id => sprint.submittedUsers.has(id));
     if (allSubmitted && Object.keys(sprint.finalTimes).length > 0) {
       await postLeaderboard(channelId);
     }
