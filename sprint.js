@@ -114,12 +114,7 @@ async function startSprint(channelId, type, minutes, sprintNumber = null) {
   const emoji = randomEmoji(type);
   const happyVerb = sprintHappyVerbs[type];
 
-  const embed = new EmbedBuilder()
-    .setColor(sprintColors[type])
-    .setTitle(`${emoji} SPRINT STARTED ${emoji}`)
-    .setDescription(`A **${sprintLabel}** has started! There are <t:${endTime}:R> left, ending at <t:${endTime}:t>.\n\nUse \`/join\` to join and \`/final\` if you have to leave early!`);
-
-  await channel.send({ embeds: [embed] });
+  await channel.send(`${emoji} **SPRINT STARTED** ${emoji}\n\nA **${sprintLabel}** has started! There are <t:${endTime}:R> left, ending at <t:${endTime}:t>.\n\nUse \`/join\` to join and \`/final\` if you have to leave early!`);
 
   activeSprints[channelId] = {
     type,
