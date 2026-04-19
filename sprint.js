@@ -99,10 +99,17 @@ function randomEmoji(type) {
 //Checks if currently GMT or BST
 function isGMT() {
   const now = new Date();
-  const jan = new Date(now.getFullYear(), 0, 1);
-  const jul = new Date(now.getFullYear(), 6, 1);
-  const stdOffset = Math.max(jan.getTimezoneOffset(), jul.getTimezoneOffset());
-  return now.getTimezoneOffset() === stdOffset;
+  const year = now.getUTCFullYear();
+  
+  // Find last Sunday in March
+  const lastSundayMarch = new Date(Date.UTC(year, 2, 31));
+  lastSundayMarch.setUTCDate(31 - lastSundayMarch.getUTCDay());
+  
+  // Find last Sunday in October
+  const lastSundayOctober = new Date(Date.UTC(year, 9, 31));
+  lastSundayOctober.setUTCDate(31 - lastSundayOctober.getUTCDay());
+  
+  return now < lastSundayMarch || now >= lastSundayOctober;
 }
 
 // HELPER: Parse BST/GMT time and date to UTC
