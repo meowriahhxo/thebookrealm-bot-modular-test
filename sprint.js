@@ -167,7 +167,8 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
       if (!sprint) return;
 
       const verb = sprintVerbs[sprint.type];
-      const finalDeadline = Math.floor((Date.now() + 5 * 60 * 1000) / 1000);
+      const submitWindow = minutes <= 30 ? 5 : 7;
+const finalDeadline = Math.floor((Date.now() + submitWindow * 60 * 1000) / 1000);
       const mentions = sprint.participants.length > 0
         ? sprint.participants.map(id => `<@${id}>`).join(', ')
         : 'everyone';
@@ -181,12 +182,11 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
         const unsubmitted = [...sprint.originalParticipants].filter(id => !sprint.submittedUsers.has(id));
         if (unsubmitted.length > 0) {
           const reminderMentions = unsubmitted.map(id => `<@${id}>`).join(', ');
-          await channel.send(`⏰ Reminder: ${reminderMentions} — you have 2 minutes left to submit your final time with \`/final\`!`);
+          await channel.send(`‼️ **Reminder:** ${reminderMentions} — you have 2 minutes left to submit your final time with \`/final\`!`);
         }
-      }, 3 * 60 * 1000);
+      }, (submitWindow - 2) * 60 * 1000);
 
-      // Leaderboard posts after 5 mins if not all submitted
-      sprint.finalTimer = setTimeout(() => postLeaderboard(channelId), 5 * 60 * 1000);
+      sprint.finalTimer = setTimeout(() => postLeaderboard(channelId), submitWindow * 60 * 1000);
     }, minutes * 60 * 1000)
   };
 }
