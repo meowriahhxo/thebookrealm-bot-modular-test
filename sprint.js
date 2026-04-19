@@ -266,17 +266,17 @@ async function registerCommands() {
       .setDescription('Start a sprint in this channel')
       .addStringOption(opt =>
         opt.setName('input')
-          .setDescription('Duration and start delay (e.g. "60 5" = 60 min sprint starting in 5 mins)')
+          .setDescription('Sprint length and delay to begin')
           .setRequired(true))
       .toJSON(),
 
     // /schedule — for Readathon sprints scheduled ahead of time
     new SlashCommandBuilder()
       .setName('schedule')
-      .setDescription('Schedule a Readathon sprint')
+      .setDescription('Schedule a sprint')
       .addIntegerOption(opt =>
         opt.setName('number')
-          .setDescription('Sprint number (e.g. 1 for Readathon Sprint #1)')
+          .setDescription('Sprint number')
           .setRequired(true))
       .addIntegerOption(opt =>
         opt.setName('minutes')
@@ -284,11 +284,15 @@ async function registerCommands() {
           .setRequired(true))
       .addStringOption(opt =>
         opt.setName('time')
-          .setDescription('Start time in BST/GMT (e.g. 3:00PM, 15:00, or 00:00)')
+          .setDescription('Start time in BST/GMT')
           .setRequired(true))
       .addStringOption(opt =>
         opt.setName('date')
-          .setDescription('Date in DD/MM/YYYY format (e.g. 02/05/2026). Leave blank for today.')
+          .setDescription('Date in DD/MM/YYYY format. Leave blank for today.')
+          .setRequired(false))
+       .addRoleOption(opt=>
+        opt.setName(`pingrole`)
+          .setDescription(`Role to ping for the 15 minute warning - defaults to Readathon`)
           .setRequired(false))
       .toJSON(),
 
@@ -313,10 +317,10 @@ async function registerCommands() {
     // /final — submit time or leave early
     new SlashCommandBuilder()
       .setName('final')
-      .setDescription('Submit your final time or leave the sprint early')
+      .setDescription('Submit your final minutes read count')
       .addIntegerOption(opt =>
         opt.setName('minutes')
-          .setDescription('How many minutes did you read/write/create/study?')
+          .setDescription('How many minutes did you participate?')
           .setRequired(true))
       .toJSON()
   ];
@@ -439,6 +443,8 @@ client.on('interactionCreate', async interaction => {
     const minutes = interaction.options.getInteger('minutes');
     const timeStr = interaction.options.getString('time');
     const dateStr = interaction.options.getString('date');
+    const pingRole = interaction.options.getRole('pingrole');
+    const roleId = pingRole ? pingRole.id : process.env.READATHON_ROLE_ID;
 
     const startTime = parseTimeToUTC(timeStr, dateStr);
     if (!startTime) {
@@ -450,7 +456,7 @@ client.on('interactionCreate', async interaction => {
     const msUntilWarning = msUntilStart - 15 * 60 * 1000;
     const startTimestamp = Math.floor(startTime.getTime() / 1000);
 
-    await interaction.reply(`✅ Readathon Sprint #${number} scheduled for <t:${startTimestamp}:t>! A reminder will be posted 15 minutes before.`);
+    await interaction.reply(`✅ Readathon Sprint #${number} scheduled for <t:${startTimestamp}:t>! It will post 15 minutes before its start time.`);
 
     pendingSprints[channelId] = {
       type: 'Readathon Sprint',
@@ -459,7 +465,7 @@ client.on('interactionCreate', async interaction => {
       participants: [],
       warningTimer: msUntilWarning > 0 ? setTimeout(async () => {
         const channel = await client.channels.fetch(channelId);
-        await channel.send(`<@&${process.env.READATHON_ROLE_ID}> Readathon Sprint #${number} is starting in 15 minutes! Use /join to read with us!`);
+        await channel.send(`<@&${roleId}> Readathon Sprint #${number} is starting in 15 minutes! Use /join to read with us!`);
       }, msUntilWarning) : null,
       pendingTimer: setTimeout(async () => {
         const pending = pendingSprints[channelId];
