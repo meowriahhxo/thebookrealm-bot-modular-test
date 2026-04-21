@@ -1,5 +1,7 @@
 const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
+const { google } = require('googleapis');
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -89,6 +91,93 @@ const sprintRoles = {
   'Art Sprint': 'ART_ROLE_ID',
   'Study Sprint': 'STUDY_ROLE_ID'
 };
+
+//Google API
+async function getAuth() {
+  const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+  return new google.auth.GoogleAuth({
+    credentials,
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+  });
+}
+
+//Write Sprint Leaderboard to Google Sheets Reading Spring Leaderboard
+async function writeSprintToSheets(sprintResults, guild) {
+  try {
+    const auth = await getAuth();
+    const sheets = google.sheets({ version: 'v4', auth });
+    
+    const now = new Date();
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                        'July', 'August', 'September', 'October', 'November', 'December'];
+    const tabName = `${monthNames[now.getMonth()]} ${now.getFullYear()}`;
+    
+    // Get existing sheet data
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.SPRINT_LEADERBOARD_ID,
+      range: `${tabName}!A:E`,
+    });
+    
+    const rows = response.data.values || [];
+    
+    for (const [userId, minutes] of Object.entries(sprintResults)) {
+      // Get member's house and display name from Discord
+      let member;
+      try {
+        member = await guild.members.fetch(userId);
+      } catch (e) {
+        continue; // skip if member not found
+      }
+      
+      const houseRoles = {
+        [process.env.ASPHODEL_ROLE_ID]: 'Asphodel',
+        [process.env.DREANNI_ROLE_ID]: 'Dreanni',
+        [process.env.LAIIDON_ROLE_ID]: 'Laiidon',
+        [process.env.ZELDARIAN_ROLE_ID]: 'Zeldarian'
+      };
+      
+      let house = null;
+      for (const [roleId, houseName] of Object.entries(houseRoles)) {
+        if (member.roles.cache.has(roleId)) {
+          house = houseName;
+          break;
+        }
+      }
+      
+      if (!house) continue; // skip if no house role
+      
+      const displayName = member.displayName;
+      
+      // Find existing row by Discord ID (column E)
+      const existingRowIndex = rows.findIndex(row => row[4] === userId);
+      
+      if (existingRowIndex !== -1) {
+        // Update existing row
+        const currentMinutes = parseFloat(rows[existingRowIndex][2]) || 0;
+        const currentSprints = parseInt(rows[existingRowIndex][3]) || 0;
+        const rowNumber = existingRowIndex + 1;
+        
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: process.env.SPRINT_LEADERBOARD_ID,
+          range: `${tabName}!C${rowNumber}:D${rowNumber}`,
+          valueInputOption: 'RAW',
+          requestBody: { values: [[currentMinutes + minutes, currentSprints + 1]] }
+        });
+      } else {
+        // Append new row
+        await sheets.spreadsheets.values.append({
+          spreadsheetId: process.env.SPRINT_LEADERBOARD_ID,
+          range: `${tabName}!A:E`,
+          valueInputOption: 'RAW',
+          requestBody: { values: [[house, displayName, minutes, 1, userId]] }
+        });
+      }
+    }
+    console.log('Sprint results written to Google Sheets!');
+  } catch (error) {
+    console.error('Error writing to Google Sheets:', error);
+  }
+}
 
 //Picks a random emoji for the sprint type
 function randomEmoji(type) {
@@ -193,7 +282,7 @@ const finalDeadline = Math.floor((Date.now() + submitWindow * 60 * 1000) / 1000)
         }
       }, (submitWindow - 2) * 60 * 1000);
 
-      sprint.finalTimer = setTimeout(() => postLeaderboard(channelId), submitWindow * 60 * 1000);
+      sprint.finalTimer = setTimeout(() => postLeaderboard(channelId, guild), submitWindow * 60 * 1000);
     }, minutes * 60 * 1000)
   };
 }
@@ -218,11 +307,9 @@ async function postSprintStart(channelId) {
   await channel.send(`${emoji} **START SPRINTING** ${emoji}\n\nThe **${sprintLabel}** has begun. You have <t:${endTime}:R> to sprint, ending at <t:${endTime}:t>. ${happyVerb}\n\n✨ **Participants:**\n${mentions}`);
 }
 
-// =====================================
-// POST LEADERBOARD
-// Fires when all submit or 5 min window expires
-// =====================================
-async function postLeaderboard(channelId) {
+//POST LEADERBOARD
+//Posts when all submit or 5 min window expires
+async function postLeaderboard(channelId, guild) {
   const sprint = activeSprints[channelId];
   if (!sprint) return;
 
@@ -259,6 +346,7 @@ async function postLeaderboard(channelId) {
   clearTimeout(sprint.timer);
   clearTimeout(sprint.finalTimer);
   clearTimeout(sprint.reminderTimer);
+  await writeSprintToSheets(sprint.finalTimes, guild);
   delete activeSprints[channelId];
 }
 
@@ -595,7 +683,7 @@ client.on('interactionCreate', async interaction => {
 
     const allSubmitted = [...sprint.originalParticipants].every(id => sprint.submittedUsers.has(id));
     if (allSubmitted && Object.keys(sprint.finalTimes).length > 0) {
-      await postLeaderboard(channelId);
+      await postLeaderboard(channelId, interaction.guild);
     }
   }
 });
