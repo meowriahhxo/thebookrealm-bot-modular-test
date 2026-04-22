@@ -351,13 +351,17 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
       const verb = sprintVerbs[sprint.type];
       const submitWindow = minutes <= 30 ? 5 : 7;
 const finalDeadline = Math.floor((Date.now() + submitWindow * 60 * 1000) / 1000);
-      const mentions = sprint.participants.length > 0
-        ? sprint.participants.map(id => `<@${id}>`).join(', ')
+      const mentions = sprint.originalParticipants.size > 0
+        ? [...sprint.originalParticipants].map(id => `<@${id}>`).join(', ')
         : 'everyone';
       const endEmoji = randomEmoji(type);
 
       //Sprint Over message
-      await channel.send(`${endEmoji} **THE SPRINT IS OVER** ${endEmoji}\n\nThis **${sprintLabel}** is over, please put in the amount of time you ${verb}. The leaderboard will post <t:${finalDeadline}:R>, you have until then to put in your final count!\n\n✨ **Participants:**\n${mentions}`);
+      const allAlreadySubmitted = [...sprint.originalParticipants].every(id => sprint.submittedUsers.has(id));
+
+      if (!allAlreadySubmitted) {
+        await channel.send(`${endEmoji} **THE SPRINT IS OVER** ${endEmoji}\n\nThis **${sprintLabel}** is over, please put in the amount of time you ${verb}. The leaderboard will post <t:${finalDeadline}:R>, you have until then to put in your final count!\n\n✨ **Participants:**\n${mentions}`);
+      }
 
       //2 minute reminder before window closes - posts after 3 mins
       sprint.reminderTimer = setTimeout(async () => {
@@ -424,7 +428,7 @@ async function postLeaderboard(channelId, guild) {
   }
 
   leaderboard += `\nCombined time: **${totalTime} minutes** over **${sprint.duration} minutes**.\n`;
-  leaderboard += `\nThanks for joining us. You can use the /sprint command to start another sprint!\n\n`;
+  leaderboard += `\nThanks for joining us. You can use the `/sprint` command to start another sprint!\n\n`;
 
   await channel.send(leaderboard);
 
@@ -748,7 +752,7 @@ client.on('interactionCreate', async interaction => {
   // ---- /time ----
   if (interaction.commandName === 'time') {
     if (!activeSprints[channelId] && !pendingSprints[channelId]) {
-      await interaction.reply({ content: `There isn't a sprint running in this channel. To start one, use the /sprint command!`, ephemeral: true });
+      await interaction.reply({ content: `There isn't a sprint running in this channel. To start one, use the `/sprint` command!`, ephemeral: true });
       return;
     }
 
