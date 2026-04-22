@@ -311,7 +311,7 @@ async function postLeaderboard(channelId, guild) {
   const sorted = Object.entries(sprint.finalTimes).sort((a, b) => b[1] - a[1]);
   const totalTime = sorted.reduce((sum, [, mins]) => sum + mins, 0);
 
-  let leaderboard = '🏆 **GREAT JOB EVERYONE** 🏆\n';
+  let leaderboard = '🏆 **GREAT JOB EVERYONE** 🏆\n\n';
   let currentRank = 1;
   let previousTime = null;
   let displayRank = 1;
@@ -577,6 +577,7 @@ client.on('interactionCreate', async interaction => {
       type: 'Readathon Sprint',
       duration: minutes,
       startsAt: startTime.getTime(),
+      guildId: interaction.guild.id,
       participants: [],
       warningTimer: msUntilWarning > 0 ? setTimeout(async () => {
         const channel = await client.channels.fetch(channelId);
@@ -587,7 +588,7 @@ client.on('interactionCreate', async interaction => {
         const carriedParticipants = pending ? [...pending.participants] : [];
         delete pendingSprints[channelId];
         const guild = client.guilds.cache.get(pending.guildId);
-        await startSprint(channelId, type, minutes, null, carriedParticipants, guild);
+        await startSprint(channelId, 'Readathon Sprint', minutes, number, carriedParticipants, guild);
         await postSprintStart(channelId);
       }, msUntilStart)
     };
@@ -675,7 +676,7 @@ client.on('interactionCreate', async interaction => {
 
     const sprint = activeSprints[channelId];
     const endTime = Math.floor(sprint.endTime / 1000);
-    await interaction.reply(`There are <t:${endTime}:R> left in this sprint! It ends at <t:${endTime}:t>.`);
+    await interaction.reply(`The sprint will end <t:${endTime}:R>, at <t:${endTime}:t>.`);
   }
 
   // ---- /final ----
