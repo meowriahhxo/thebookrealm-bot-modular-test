@@ -31,6 +31,16 @@ const channelSprintTypes = {
   [process.env.STUDY_CHANNEL_ID]: 'Study Sprint'
 };
 
+console.log('Channel sprint types loaded:', channelSprintTypes);
+console.log('Current channel IDs from env:', {
+  TALL_TOMES: process.env.TALL_TOMES_CHANNEL_ID,
+  SHORT_STACKS: process.env.SHORT_STACKS_CHANNEL_ID,
+  READATHON: process.env.READATHON_CHANNEL_ID,
+  WRITING: process.env.WRITING_CHANNEL_ID,
+  ART: process.env.ART_CHANNEL_ID,
+  STUDY: process.env.STUDY_CHANNEL_ID,
+});
+
 // =====================================
 // EMOJI POOLS PER SPRINT TYPE
 // =====================================
@@ -239,8 +249,7 @@ function parseTimeToUTC(timeStr, dateStr = null) {
   return target;
 }
 
-// START SPRINT- Creates the active sprint and sets up timers
-
+//START SPRINT- Creates the active sprint and sets up timers
 async function startSprint(channelId, type, minutes, sprintNumber = null, carriedParticipants = []) {
   const channel = await client.channels.fetch(channelId);
   const endTime = Math.floor((Date.now() + minutes * 60 * 1000) / 1000);
@@ -257,7 +266,7 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
     submittedUsers: new Set(),
     sprintNumber,
 
-    // Timer - fires when sprint ends
+    //Timer - fires when sprint ends
     timer: setTimeout(async () => {
       const sprint = activeSprints[channelId];
       if (!sprint) return;
@@ -270,10 +279,10 @@ const finalDeadline = Math.floor((Date.now() + submitWindow * 60 * 1000) / 1000)
         : 'everyone';
       const endEmoji = randomEmoji(type);
 
-      // TIME'S UP message
+      //Spring Over message
       await channel.send(`${endEmoji} **THE SPRINT IS OVER** ${endEmoji}\n${mentions}\nThis **${sprintLabel}** is over, please put in the amount of time you ${verb}. You have <t:${finalDeadline}:R> to put in your final count!`);
 
-      // 2 minute reminder before window closes - posts after 3 mins
+      //2 minute reminder before window closes - posts after 3 mins
       sprint.reminderTimer = setTimeout(async () => {
         const unsubmitted = [...sprint.originalParticipants].filter(id => !sprint.submittedUsers.has(id));
         if (unsubmitted.length > 0) {
@@ -287,10 +296,8 @@ const finalDeadline = Math.floor((Date.now() + submitWindow * 60 * 1000) / 1000)
   };
 }
 
-// =====================================
-// POST SPRINT START MESSAGE
-// Fires when sprint actually begins (after countdown)
-// =====================================
+//POST SPRINT START MESSAGE
+//Posts when sprint actually begins (after countdown)
 async function postSprintStart(channelId) {
   const sprint = activeSprints[channelId];
   if (!sprint) return;
@@ -350,9 +357,7 @@ async function postLeaderboard(channelId, guild) {
   delete activeSprints[channelId];
 }
 
-// =====================================
-// REGISTER SLASH COMMANDS
-// =====================================
+//Register Slash Commands
 async function registerCommands() {
   const commands = [
     // /sprint [input] — e.g. "60 5" = 60 min sprint starting in 5 mins
@@ -425,17 +430,13 @@ async function registerCommands() {
   console.log('Sprint commands registered!');
 }
 
-// =====================================
 // BOT READY
-// =====================================
 client.once('clientReady', async () => {
   console.log(`Sprint bot online as ${client.user.tag}!`);
   await registerCommands();
 });
 
-// =====================================
 // INTERACTION HANDLER
-// =====================================
 client.on('interactionCreate', async interaction => {
   const channelId = interaction.channelId;
 
@@ -515,12 +516,14 @@ client.on('interactionCreate', async interaction => {
       type,
       duration: minutes,
       startsAt,
+      guildId: interaction.guild.id,
       participants: [],
       pendingTimer: setTimeout(async () => {
         const pending = pendingSprints[channelId];
         const carriedParticipants = pending ? [...pending.participants] : [];
         delete pendingSprints[channelId];
-        await startSprint(channelId, type, minutes, null, carriedParticipants);
+        const guild = client.guilds.cache.get(pending.guildId);
+        await startSprint(channelId, type, minutes, null, carriedParticipants, guild);
         await postSprintStart(channelId);
       }, startsIn * 60 * 1000)
     };
@@ -566,7 +569,8 @@ client.on('interactionCreate', async interaction => {
         const pending = pendingSprints[channelId];
         const carriedParticipants = pending ? [...pending.participants] : [];
         delete pendingSprints[channelId];
-        await startSprint(channelId, 'Readathon Sprint', minutes, number, carriedParticipants);
+        const guild = client.guilds.cache.get(pending.guildId);
+        await startSprint(channelId, type, minutes, null, carriedParticipants, guild);
         await postSprintStart(channelId);
       }, msUntilStart)
     };
@@ -688,7 +692,5 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-// =====================================
 // LOGIN
-// =====================================
 client.login(process.env.DISCORD_TOKEN);
