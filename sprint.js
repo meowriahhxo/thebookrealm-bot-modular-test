@@ -516,7 +516,7 @@ client.on('interactionCreate', async interaction => {
     if (fixedDurations[type]) {
       minutes = fixedDurations[type];
     } else {
-      if (!inputMinutes || inputMinutes < 15 || inputMinutes > 60) {
+      if (!inputMinutes || inputMinutes < 1 || inputMinutes > 60) {
         await interaction.reply({ content: `Please provide a duration between 15 and 60 minutes for a **${type}**!`, ephemeral: true });
         return;
       }
