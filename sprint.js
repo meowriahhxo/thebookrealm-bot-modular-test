@@ -350,33 +350,27 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
 
       const verb = sprintVerbs[sprint.type];
       const submitWindow = minutes <= 30 ? 5 : 7;
-const finalDeadline = Math.floor((Date.now() + submitWindow * 60 * 1000) / 1000);
+      const finalDeadline = Math.floor((Date.now() + submitWindow * 60 * 1000) / 1000);
       const mentions = sprint.originalParticipants.size > 0
         ? [...sprint.originalParticipants].map(id => `<@${id}>`).join(', ')
         : 'everyone';
       const endEmoji = randomEmoji(type);
-
-      //Sprint Over message
       const allAlreadySubmitted = [...sprint.originalParticipants].every(id => sprint.submittedUsers.has(id));
 
       if (!allAlreadySubmitted) {
         await channel.send(`${endEmoji} **THE SPRINT IS OVER** ${endEmoji}\n\nThis **${sprintLabel}** is over, please put in the amount of time you ${verb}. The leaderboard will post <t:${finalDeadline}:R>, you have until then to put in your final count!\n\n✨ **Participants:**\n${mentions}`);
-      }
 
-      //2 minute reminder before window closes - posts after 3 mins
-      sprint.reminderTimer = setTimeout(async () => {
-        const unsubmitted = [...sprint.originalParticipants].filter(id => !sprint.submittedUsers.has(id));
-        if (unsubmitted.length > 0) {
-          const reminderMentions = unsubmitted.map(id => `<@${id}>`).join(', ');
-          await channel.send(`‼️ **Reminder:** ${reminderMentions} — you have 2 minutes left to submit your final time with \`/final\`!`);
-        }
-      }, (submitWindow - 2) * 60 * 1000);
+        sprint.reminderTimer = setTimeout(async () => {
+          const unsubmitted = [...sprint.originalParticipants].filter(id => !sprint.submittedUsers.has(id));
+          if (unsubmitted.length > 0) {
+            const reminderMentions = unsubmitted.map(id => `<@${id}>`).join(', ');
+            await channel.send(`‼️ **Reminder:** ${reminderMentions} — you have 2 minutes left to submit your final time with \`/final\`!`);
+          }
+        }, (submitWindow - 2) * 60 * 1000);
 
-      const allAlreadySubmitted = [...sprint.originalParticipants].every(id => sprint.submittedUsers.has(id));
-      if (allAlreadySubmitted && Object.keys(sprint.finalTimes).length > 0) {
-        await postLeaderboard(channelId, guild);
-      } else {
         sprint.finalTimer = setTimeout(() => postLeaderboard(channelId, guild), submitWindow * 60 * 1000);
+      } else {
+        await postLeaderboard(channelId, guild);
       }
     }, minutes * 60 * 1000)
   };
