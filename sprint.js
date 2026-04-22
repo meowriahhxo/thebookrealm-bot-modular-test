@@ -14,6 +14,7 @@ const client = new Client({
 //Sprint State
 const activeSprints = {};
 const pendingSprints = {};
+const scheduledSprints = {};
 const cooldowns = {};
 
 // Channel Dependent Sprint Time Mapping
@@ -571,6 +572,10 @@ async function registerCommands() {
     new SlashCommandBuilder()
       .setName('cancel')
       .setDescription('Cancel the active or upcoming sprint in this channel')
+      .addIntegerOption(opt =>
+        opt.setName('number')
+          .setDescription('Readathon sprint number to cancel (optional)')
+          .setRequired(false))
       .toJSON(),
 
     // /join — join the active sprint
@@ -775,32 +780,99 @@ client.on('interactionCreate', async interaction => {
     const msUntilWarning = msUntilStart - 15 * 60 * 1000;
     const startTimestamp = Math.floor(startTime.getTime() / 1000);
 
-    await interaction.reply(`✅ Readathon Sprint #${number} scheduled for <t:${startTimestamp}:t>! It will post 15 minutes before its start time.`);
+    if (msUntilStart <= 0) {
+      await interaction.reply({ content: 'That time has already passed!', ephemeral: true });
+      return;
+    }
 
-    pendingSprints[channelId] = {
-      type: 'Readathon Sprint',
-      duration: minutes,
-      startsAt: startTime.getTime(),
+    if (!scheduledSprints[channelId]) scheduledSprints[channelId] = [];
+
+    // Check if sprint number already scheduled
+    if (scheduledSprints[channelId].find(s => s.number === number)) {
+      await interaction.reply({ content: `Readathon Sprint #${number} is already scheduled!`, ephemeral: true });
+      return;
+    }
+
+    const warningTimer = msUntilWarning > 0 ? setTimeout(async () => {
+      const channel = await client.channels.fetch(channelId);
+      const warningTimestamp = Math.floor(startTime.getTime() / 1000);
+      await channel.send(`<@&${roleId}> Readathon Sprint #${number} is starting <t:${warningTimestamp}:R>! Use \`/join\` to read with us!`);
+
+      // Move to pendingSprints so people can join
+      const scheduled = scheduledSprints[channelId]?.find(s => s.number === number);
+      const carriedParticipants = scheduled?.participants || [];
+      pendingSprints[channelId] = {
+        type: 'Readathon Sprint',
+        duration: minutes,
+        startsAt: startTime.getTime(),
+        guildId: interaction.guild.id,
+        participants: [...carriedParticipants],
+        sprintNumber: number,
+        pendingTimer: setTimeout(async () => {
+          const pending = pendingSprints[channelId];
+          const carried = pending ? [...pending.participants] : [];
+          delete pendingSprints[channelId];
+          // Remove from scheduled queue
+          if (scheduledSprints[channelId]) {
+            scheduledSprints[channelId] = scheduledSprints[channelId].filter(s => s.number !== number);
+          }
+          const guild = client.guilds.cache.get(interaction.guild.id);
+          await startSprint(channelId, 'Readathon Sprint', minutes, number, carried, guild);
+          await postSprintStart(channelId);
+        }, 15 * 60 * 1000)
+      };
+    }, msUntilWarning) : null;
+
+    // If less than 15 mins until start, fire immediately
+    const pendingTimer = msUntilWarning <= 0 ? setTimeout(async () => {
+      const pending = pendingSprints[channelId];
+      const carried = pending ? [...pending.participants] : [];
+      delete pendingSprints[channelId];
+      if (scheduledSprints[channelId]) {
+        scheduledSprints[channelId] = scheduledSprints[channelId].filter(s => s.number !== number);
+      }
+      const guild = client.guilds.cache.get(interaction.guild.id);
+      await startSprint(channelId, 'Readathon Sprint', minutes, number, carried, guild);
+      await postSprintStart(channelId);
+    }, msUntilStart) : null;
+
+    scheduledSprints[channelId].push({
+      number,
+      minutes,
+      startTime: startTime.getTime(),
       guildId: interaction.guild.id,
       participants: [],
-      warningTimer: msUntilWarning > 0 ? setTimeout(async () => {
-        const channel = await client.channels.fetch(channelId);
-        const warningTimestamp = Math.floor(startTime.getTime() / 1000);
-        await channel.send(`<@&${roleId}> Readathon Sprint #${number} is starting <t:${warningTimestamp}:R>! Use \`/join\` to read with us!`);
-      }, msUntilWarning) : null,
-      pendingTimer: setTimeout(async () => {
-        const pending = pendingSprints[channelId];
-        const carriedParticipants = pending ? [...pending.participants] : [];
-        delete pendingSprints[channelId];
-        const guild = client.guilds.cache.get(pending.guildId);
-        await startSprint(channelId, 'Readathon Sprint', minutes, number, carriedParticipants, guild);
-        await postSprintStart(channelId);
-      }, msUntilStart)
-    };
+      warningTimer,
+      pendingTimer
+    });
+
+    // Sort by start time
+    scheduledSprints[channelId].sort((a, b) => a.startTime - b.startTime);
+
+    await interaction.reply(`✅ Readathon Sprint #${number} scheduled for <t:${startTimestamp}:t>! It will post 15 minutes before its start time.`);
   }
 
   // ---- /cancel ----
   if (interaction.commandName === 'cancel') {
+    const sprintNumber = interaction.options.getInteger('number');
+
+    // Cancelling a specific scheduled sprint
+    if (sprintNumber) {
+      if (!scheduledSprints[channelId] || !scheduledSprints[channelId].find(s => s.number === sprintNumber)) {
+        await interaction.reply({ content: `Readathon Sprint #${sprintNumber} isn't scheduled in this channel.`, ephemeral: true });
+        return;
+      }
+
+      const scheduled = scheduledSprints[channelId].find(s => s.number === sprintNumber);
+      clearTimeout(scheduled.warningTimer);
+      clearTimeout(scheduled.pendingTimer);
+      scheduledSprints[channelId] = scheduledSprints[channelId].filter(s => s.number !== sprintNumber);
+      const scheduledTimestamp = Math.floor(scheduled.startTime / 1000);
+      await interaction.reply(`Readathon Sprint #${sprintNumber} (scheduled for <t:${scheduledTimestamp}:t>) has been cancelled.`);
+      return;
+    }
+
+    // Cancelling active or pending sprint
     const sprint = activeSprints[channelId] || pendingSprints[channelId];
     if (!sprint) {
       await interaction.reply({ content: `There isn't a sprint running or scheduled in this channel.`, ephemeral: true });
@@ -867,21 +939,28 @@ client.on('interactionCreate', async interaction => {
 
   // ---- /time ----
   if (interaction.commandName === 'time') {
-    if (!activeSprints[channelId] && !pendingSprints[channelId]) {
-      await interaction.reply({ content: `There isn't a sprint running in this channel. To start one, use the \`/sprint\` command!`, ephemeral: true });
+    if (activeSprints[channelId]) {
+      const sprint = activeSprints[channelId];
+      const endTime = Math.floor(sprint.endTime / 1000);
+      await interaction.reply(`The sprint will end <t:${endTime}:R>, at <t:${endTime}:t>.`);
       return;
     }
 
-    if (pendingSprints[channelId] && !activeSprints[channelId]) {
+    if (pendingSprints[channelId]) {
       const sprint = pendingSprints[channelId];
       const startsAt = Math.floor(sprint.startsAt / 1000);
-      await interaction.reply({ content: `The **${sprint.type}** hasn't started yet! It begins <t:${startsAt}:R>.`, ephemeral: true });
+      await interaction.reply({ content: `Readathon Sprint #${sprint.sprintNumber} is starting <t:${startsAt}:R>! Use \`/join\` to join!`, ephemeral: true });
       return;
     }
 
-    const sprint = activeSprints[channelId];
-    const endTime = Math.floor(sprint.endTime / 1000);
-    await interaction.reply(`The sprint will end <t:${endTime}:R>, at <t:${endTime}:t>.`);
+    if (scheduledSprints[channelId] && scheduledSprints[channelId].length > 0) {
+      const next = scheduledSprints[channelId][0];
+      const startsAt = Math.floor(next.startTime / 1000);
+      await interaction.reply({ content: `The next scheduled sprint is Readathon Sprint #${next.number}, starting <t:${startsAt}:R>.`, ephemeral: true });
+      return;
+    }
+
+    await interaction.reply({ content: `There isn't a sprint running in this channel. To start one, use the \`/sprint\` command!`, ephemeral: true });
   }
 
   // ---- /final ----
