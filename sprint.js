@@ -424,7 +424,7 @@ async function postLeaderboard(channelId, guild) {
   }
 
   leaderboard += `\nCombined time: **${totalTime} minutes** over **${sprint.duration} minutes**.\n`;
-  leaderboard += `\nThanks for joining us. You can use the /sprint command to start another sprint!\n\n`;
+  leaderboard += `\nThanks for joining us. You can use the \`/sprint\` command to start another sprint!\n\n`;
 
   await channel.send(leaderboard);
 
@@ -748,7 +748,7 @@ client.on('interactionCreate', async interaction => {
   // ---- /time ----
   if (interaction.commandName === 'time') {
     if (!activeSprints[channelId] && !pendingSprints[channelId]) {
-      await interaction.reply({ content: `There isn't a sprint running in this channel. To start one, use the /sprint command!`, ephemeral: true });
+      await interaction.reply({ content: `There isn't a sprint running in this channel. To start one, use the \`/sprint\` command!`, ephemeral: true });
       return;
     }
 
@@ -790,7 +790,7 @@ client.on('interactionCreate', async interaction => {
       );
 
       await interaction.reply({
-        content: `You didn't officially join this sprint — are you sure you want to submit **${minutes} minutes**? Please be honest and only submit the amount of time you actually ${verb}!`,
+        content: `You didn't officially join this sprint, are you sure you want to submit **${minutes} minutes**? Please be honest and only submit the amount of time you actually ${verb}!`,
         components: [row],
         flags: 64
       });
