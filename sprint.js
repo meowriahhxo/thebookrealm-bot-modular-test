@@ -41,9 +41,7 @@ console.log('Current channel IDs from env:', {
   STUDY: process.env.STUDY_CHANNEL_ID,
 });
 
-// =====================================
-// EMOJI POOLS PER SPRINT TYPE
-// =====================================
+//Emoji Selections for Sprint Type
 const sprintEmojis = {
   'Tall Tomes Sprint': ['📚', '📖', '🔖', '🌙', '✨', '⭐'],
   'Short Stacks Sprint': ['📚', '📖', '🔖', '🌙', '✨', '⭐'],
@@ -53,10 +51,7 @@ const sprintEmojis = {
   'Study Sprint': ['📝', '📐', '💡', '🧠', '⭐', '🔍']
 };
 
-// =====================================
-// VERBS PER SPRINT TYPE
-// Used in end message ("amount of time you read/wrote/etc")
-// =====================================
+//Verbs for Sprint Type
 const sprintVerbs = {
   'Tall Tomes Sprint': 'read',
   'Short Stacks Sprint': 'read',
@@ -66,10 +61,7 @@ const sprintVerbs = {
   'Study Sprint': 'studied'
 };
 
-// =====================================
-// HAPPY VERBS PER SPRINT TYPE
-// Used in start sprinting message
-// =====================================
+//Happy Verbs for Sprint Type
 const sprintHappyVerbs = {
   'Tall Tomes Sprint': 'Happy reading!',
   'Short Stacks Sprint': 'Happy reading!',
@@ -79,20 +71,15 @@ const sprintHappyVerbs = {
   'Study Sprint': 'Happy studying!'
 };
 
-// =====================================
 // FIXED DURATIONS
-// These sprint types always run for a set time
-// =====================================
 const fixedDurations = {
   'Short Stacks Sprint': 30,
   'Tall Tomes Sprint': 60,
   'Readathon Sprint': 60
 };
 
-// =====================================
-// ROLE IDs PER SPRINT TYPE
+//Role IDs per Sprint Type
 // Replace placeholders with real IDs when moving to main server
-// =====================================
 const sprintRoles = {
   'Tall Tomes Sprint': 'TALL_TOMES_ROLE_ID',
   'Short Stacks Sprint': 'SHORT_STACKS_ROLE_ID',
@@ -211,9 +198,9 @@ function isGMT() {
   return now < lastSundayMarch || now >= lastSundayOctober;
 }
 
-// HELPER: Parse BST/GMT time and date to UTC
-// Accepts: "3:00PM", "15:00", "00:00"
-// Date format: "DD/MM/YYYY"
+//HELPER: Parse BST/GMT time and date to UTC
+//Accepts: "3:00PM", "15:00", "00:00"
+//Date format: "DD/MM/YYYY"
 
 function parseTimeToUTC(timeStr, dateStr = null) {
   const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
@@ -250,7 +237,7 @@ function parseTimeToUTC(timeStr, dateStr = null) {
 }
 
 //START SPRINT- Creates the active sprint and sets up timers
-async function startSprint(channelId, type, minutes, sprintNumber = null, carriedParticipants = []) {
+async function startSprint(channelId, type, minutes, sprintNumber = null, carriedParticipants = [], guild = null) {
   const channel = await client.channels.fetch(channelId);
   const endTime = Math.floor((Date.now() + minutes * 60 * 1000) / 1000);
   const sprintLabel = sprintNumber ? `Readathon Sprint #${sprintNumber}` : type;
@@ -279,8 +266,8 @@ const finalDeadline = Math.floor((Date.now() + submitWindow * 60 * 1000) / 1000)
         : 'everyone';
       const endEmoji = randomEmoji(type);
 
-      //Spring Over message
-      await channel.send(`${endEmoji} **THE SPRINT IS OVER** ${endEmoji}\n${mentions}\nThis **${sprintLabel}** is over, please put in the amount of time you ${verb}. You have <t:${finalDeadline}:R> to put in your final count!`);
+      //Sprint Over message
+      await channel.send(`${endEmoji} **THE SPRINT IS OVER** ${endEmoji}\n\nThis **${sprintLabel}** is over, please put in the amount of time you ${verb}. The leaderboard will post <t:${finalDeadline}:R>, you have until then to put in your final count!\n\n✨ **Participants:**\n${mentions}`);
 
       //2 minute reminder before window closes - posts after 3 mins
       sprint.reminderTimer = setTimeout(async () => {
@@ -311,7 +298,7 @@ async function postSprintStart(channelId) {
     ? sprint.participants.map(id => `<@${id}>`).join(', ')
     : '';
 
-  await channel.send(`${emoji} **START SPRINTING** ${emoji}\n\nThe **${sprintLabel}** has begun. You have <t:${endTime}:R> to sprint, ending at <t:${endTime}:t>. ${happyVerb}\n\n✨ **Participants:**\n${mentions}`);
+  await channel.send(`${emoji} **START SPRINTING** ${emoji}\n\nThe **${sprintLabel}** has begun. the sprint will end <t:${endTime}:R>, at <t:${endTime}:t>. ${happyVerb}\n\n✨ **Participants:**\n${mentions}`);
 }
 
 //POST LEADERBOARD
@@ -335,7 +322,7 @@ async function postLeaderboard(channelId, guild) {
       leaderboard += `= ${displayRank}. <@${userId}> — **${minutes} minutes**\n`;
     } else {
       displayRank = currentRank;
-      leaderboard += `  ${displayRank}. <@${userId}> — **${minutes} minutes**\n`;
+      leaderboard += `${displayRank}. <@${userId}> — **${minutes} minutes**\n`;
       previousTime = minutes;
     }
     currentRank++;
@@ -461,6 +448,36 @@ client.on('interactionCreate', async interaction => {
 
     if (interaction.customId === 'deny_cancel') {
       await interaction.update({ content: 'Cancel aborted — sprint continues!', components: [] });
+    }
+
+    if (interaction.customId.startsWith('confirm_final_')) {
+      const parts = interaction.customId.split('_');
+      const minutes = parseInt(parts[2]);
+      const userId = parts[3];
+
+      const sprint = activeSprints[channelId];
+      if (!sprint) {
+        await interaction.update({ content: 'That sprint has already ended!', components: [] });
+        return;
+      }
+
+      sprint.finalTimes[userId] = minutes;
+      sprint.submittedUsers.add(userId);
+      sprint.originalParticipants.add(userId);
+      sprint.participants = sprint.participants.filter(id => id !== userId);
+
+      await interaction.update({ content: `Got it! Your **${minutes} minutes** have been logged.`, components: [] });
+      await interaction.channel.send(`<@${userId}> has logged **${minutes} minutes**!`);
+
+      const sprintEnded = Date.now() >= sprint.endTime;
+      const allSubmitted = [...sprint.originalParticipants].every(id => sprint.submittedUsers.has(id));
+      if (sprintEnded && allSubmitted && Object.keys(sprint.finalTimes).length > 0) {
+        await postLeaderboard(channelId, interaction.guild);
+      }
+    }
+
+    if (interaction.customId === 'deny_final') {
+      await interaction.update({ content: `No worries, nothing was submitted!`, components: [] });
     }
     return;
   }
@@ -666,7 +683,7 @@ client.on('interactionCreate', async interaction => {
     const minutes = interaction.options.getInteger('minutes');
 
     if (!activeSprints[channelId]) {
-      await interaction.reply({ content: `There isn't an active sprint in this channel right now.`, ephemeral: true });
+      await interaction.reply({ content: `There isn't an active sprint in this channel right now.`, flags: 64 });
       return;
     }
 
@@ -675,18 +692,36 @@ client.on('interactionCreate', async interaction => {
     const wasParticipant = sprint.originalParticipants.has(interaction.user.id) || sprint.participants.includes(interaction.user.id);
 
     if (!wasParticipant) {
-      await interaction.reply({ content: `You didn't join this sprint, but if you were reading along, you're welcome to submit your time. Please be honest and share the amount of time you ${verb} during this sprint!`, ephemeral: true });
-    } else {
-      await interaction.reply(`<@${interaction.user.id}> has logged **${minutes} minutes**!`);
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`confirm_final_${minutes}_${interaction.user.id}`)
+          .setLabel(`Yes, I ${verb} for ${minutes} minutes`)
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId('deny_final')
+          .setLabel('Actually, never mind')
+          .setStyle(ButtonStyle.Secondary)
+      );
+
+      await interaction.reply({
+        content: `You didn't officially join this sprint — are you sure you want to submit **${minutes} minutes**? Please be honest and only submit the amount of time you actually ${verb}!`,
+        components: [row],
+        flags: 64
+      });
+      return;
     }
 
+    // Regular participant flow
     sprint.finalTimes[interaction.user.id] = minutes;
     sprint.submittedUsers.add(interaction.user.id);
     sprint.originalParticipants.add(interaction.user.id);
     sprint.participants = sprint.participants.filter(id => id !== interaction.user.id);
 
+    await interaction.reply(`<@${interaction.user.id}> has logged **${minutes} minutes**!`);
+
+    const sprintEnded = Date.now() >= sprint.endTime;
     const allSubmitted = [...sprint.originalParticipants].every(id => sprint.submittedUsers.has(id));
-    if (allSubmitted && Object.keys(sprint.finalTimes).length > 0) {
+    if (sprintEnded && allSubmitted && Object.keys(sprint.finalTimes).length > 0) {
       await postLeaderboard(channelId, interaction.guild);
     }
   }
