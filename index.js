@@ -71,7 +71,8 @@ async function getAuth() {
 async function getSheetData() {
   const auth = await getAuth();
   const sheets = google.sheets({ version: 'v4', auth });
-  const currentMonth = monthNames[new Date().getMonth()];
+  const easternTime = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const currentMonth = monthNames[easternTime.getMonth()];
   
   const housePoints = [];
   for (const house of HOUSES) {
