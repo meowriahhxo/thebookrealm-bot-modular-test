@@ -11,17 +11,12 @@ const client = new Client({
   ]
 });
 
-// =====================================
-// SPRINT STATE
-// =====================================
+//Sprint State
 const activeSprints = {};
 const pendingSprints = {};
 const cooldowns = {};
 
-// =====================================
-// CHANNEL → SPRINT TYPE MAPPING
-// Replace placeholders with real IDs when moving to main server
-// =====================================
+// Channel Dependent Sprint Time Mapping
 const channelSprintTypes = {
   [process.env.TALL_TOMES_CHANNEL_ID]: 'Tall Tomes Sprint',
   [process.env.SHORT_STACKS_CHANNEL_ID]: 'Short Stacks Sprint',
@@ -98,9 +93,103 @@ async function getAuth() {
   });
 }
 
-//Write Sprint Leaderboard to Google Sheets Reading Spring Leaderboard
-async function writeSprintToSheets(sprintResults, guild) {
+//Write Writing/Art/Study sprint minutes to Points spreadsheet by house
+async function writeCreativeSprints(sprintResults, guild, sprintType) {
   try {
+    const auth = await getAuth();
+    const sheets = google.sheets({ version: 'v4', auth });
+
+    const sprintPointsCells = {
+      'Writing Sprint': { Asphodel: 'B7', Dreanni: 'C7', Laiidon: 'D7', Zeldarian: 'E7' },
+      'Study Sprint':   { Asphodel: 'B8', Dreanni: 'C8', Laiidon: 'D8', Zeldarian: 'E8' },
+      'Art Sprint':     { Asphodel: 'B9', Dreanni: 'C9', Laiidon: 'D9', Zeldarian: 'E9' }
+    };
+
+    const houseRoles = {
+      [process.env.ASPHODEL_ROLE_ID]: 'Asphodel',
+      [process.env.DREANNI_ROLE_ID]: 'Dreanni',
+      [process.env.LAIIDON_ROLE_ID]: 'Laiidon',
+      [process.env.ZELDARIAN_ROLE_ID]: 'Zeldarian'
+    };
+
+    // Tally minutes per house
+    const houseTotals = { Asphodel: 0, Dreanni: 0, Laiidon: 0, Zeldarian: 0 };
+
+    for (const [userId, minutes] of Object.entries(sprintResults)) {
+      let member;
+      try {
+        member = await guild.members.fetch(userId);
+      } catch (e) {
+        continue;
+      }
+
+      let house = null;
+      for (const [roleId, houseName] of Object.entries(houseRoles)) {
+        if (member.roles.cache.has(roleId)) {
+          house = houseName;
+          break;
+        }
+      }
+
+      if (!house) continue;
+      houseTotals[house] += minutes;
+    }
+
+    // Get current month tab
+    const now = new Date();
+    const easternTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                        'July', 'August', 'September', 'October', 'November', 'December'];
+    const tabName = `${monthNames[easternTime.getMonth()]} ${easternTime.getFullYear()}`;
+
+    // Write to each house's cell
+    for (const [house, minutes] of Object.entries(houseTotals)) {
+      if (minutes === 0) continue;
+
+      const cell = sprintPointsCells[sprintType][house];
+
+      // Read current value
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId: process.env.POINTS_SPREADSHEET_ID,
+        range: `${tabName}!${cell}`,
+        valueRenderOption: 'UNFORMATTED_VALUE'
+      });
+
+      const current = parseFloat(response.data.values?.[0]?.[0]) || 0;
+
+      // Write updated value
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: process.env.POINTS_SPREADSHEET_ID,
+        range: `${tabName}!${cell}`,
+        valueInputOption: 'RAW',
+        requestBody: { values: [[current + minutes]] }
+      });
+    }
+
+    console.log(`${sprintType} results written to Points spreadsheet!`);
+  } catch (error) {
+    console.error(`Error writing ${sprintType} to Points spreadsheet:`, error);
+  }
+}
+
+//Write Sprint Leaderboard to Google Sheets Reading Sprint Leaderboard
+async function writeSprintToSheets(sprintResults, guild, sprintType) {
+  try {
+    // Route to correct spreadsheet based on sprint type
+    if (sprintType === 'Writing Sprint' || sprintType === 'Art Sprint' || sprintType === 'Study Sprint') {
+      await writeCreativeSprints(sprintResults, guild, sprintType);
+      return;
+    }
+    
+    if (sprintType === 'Readathon Sprint') {
+      // TODO: Readathon leaderboard - coming soon
+      return;
+    }
+    
+    if (sprintType !== 'Tall Tomes Sprint' && sprintType !== 'Short Stacks Sprint') {
+      return;
+    }
+
     const auth = await getAuth();
     const sheets = google.sheets({ version: 'v4', auth });
     
@@ -108,7 +197,7 @@ async function writeSprintToSheets(sprintResults, guild) {
     const easternTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
                     'July', 'August', 'September', 'October', 'November', 'December'];
-    const tabName = `${monthNames[easternTime.getMonth()]} ${easternTime.getFullYear()}`;
+    const tabName = `${monthNames[easternTime.getMonth()]} ${easternTime.getFullYear()}`;    
     
     // Get existing sheet data
     const response = await sheets.spreadsheets.values.get({
@@ -341,7 +430,7 @@ async function postLeaderboard(channelId, guild) {
   clearTimeout(sprint.timer);
   clearTimeout(sprint.finalTimer);
   clearTimeout(sprint.reminderTimer);
-  await writeSprintToSheets(sprint.finalTimes, guild);
+  await writeSprintToSheets(sprint.finalTimes, guild, sprint.type);
   delete activeSprints[channelId];
 }
 
