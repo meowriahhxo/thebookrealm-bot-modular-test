@@ -368,7 +368,12 @@ const finalDeadline = Math.floor((Date.now() + submitWindow * 60 * 1000) / 1000)
         }
       }, (submitWindow - 2) * 60 * 1000);
 
-      sprint.finalTimer = setTimeout(() => postLeaderboard(channelId, guild), submitWindow * 60 * 1000);
+      const allAlreadySubmitted = [...sprint.originalParticipants].every(id => sprint.submittedUsers.has(id));
+      if (allAlreadySubmitted && Object.keys(sprint.finalTimes).length > 0) {
+        await postLeaderboard(channelId, guild);
+      } else {
+        sprint.finalTimer = setTimeout(() => postLeaderboard(channelId, guild), submitWindow * 60 * 1000);
+      }
     }, minutes * 60 * 1000)
   };
 }
@@ -418,12 +423,8 @@ async function postLeaderboard(channelId, guild) {
     currentRank++;
   }
 
-  const cooldownTime = Math.floor((Date.now() + 3 * 60 * 1000) / 1000);
-  cooldowns[channelId] = Date.now() + 3 * 60 * 1000;
-
   leaderboard += `\nCombined time: **${totalTime} minutes** over **${sprint.duration} minutes**.\n`;
-  leaderboard += `\nThanks for joining us. You can use the /sprint command to start another <t:${cooldownTime}:R>!\n\n`;
-  leaderboard += `-# <@&${process.env.KEEPERS_ROLE_ID}> a sprint just ended, thank you!`;
+  leaderboard += `\nThanks for joining us. You can use the /sprint command to start another sprint!\n\n`;
 
   await channel.send(leaderboard);
 
@@ -592,12 +593,6 @@ client.on('interactionCreate', async interaction => {
       return;
     }
 
-    if (cooldowns[channelId] && Date.now() < cooldowns[channelId]) {
-      const cooldownTime = Math.floor(cooldowns[channelId] / 1000);
-      await interaction.reply({ content: `Please wait until <t:${cooldownTime}:R> before starting another sprint!`, ephemeral: true });
-      return;
-    }
-
     const input = interaction.options.getString('input').trim().split(/\s+/);
     const inputMinutes = parseInt(input[0]);
     const startsIn = parseInt(input[1]) || 1;
@@ -726,7 +721,7 @@ client.on('interactionCreate', async interaction => {
   if (interaction.commandName === 'join') {
     const sprint = activeSprints[channelId] || pendingSprints[channelId];
     if (!sprint) {
-      await interaction.reply({ content: `There isn't a sprint running in this channel. To start one, use the /sprint command!`, ephemeral: true });
+      await interaction.reply({ content: `There isn't a sprint running in this channel. To start one, use the `/sprint` command!`, ephemeral: true });
       return;
     }
 
