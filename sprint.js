@@ -70,7 +70,6 @@ const sprintHappyVerbs = {
 const fixedDurations = {
   'Short Stacks Sprint': 30,
   'Tall Tomes Sprint': 60,
-  'Readathon Sprint': 60
 };
 
 //Role IDs per Sprint Type
