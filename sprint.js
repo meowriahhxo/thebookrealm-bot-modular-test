@@ -777,7 +777,7 @@ client.on('interactionCreate', async interaction => {
     }
 
     const msUntilStart = startTime.getTime() - Date.now();
-    const msUntilWarning = msUntilStart - 15 * 60 * 1000;
+    const msUntilWarning = msUntilStart - 2 * 60 * 1000;
     const startTimestamp = Math.floor(startTime.getTime() / 1000);
 
     if (msUntilStart <= 0) {
@@ -791,6 +791,19 @@ client.on('interactionCreate', async interaction => {
     if (scheduledSprints[channelId].find(s => s.number === number)) {
       await interaction.reply({ content: `Readathon Sprint #${number} is already scheduled!`, ephemeral: true });
       return;
+    }
+
+    // If less than warning window, add to pendingSprints immediately so people can join
+    if (msUntilWarning <= 0) {
+      pendingSprints[channelId] = {
+        type: 'Readathon Sprint',
+        duration: minutes,
+        startsAt: startTime.getTime(),
+        guildId: interaction.guild.id,
+        participants: [],
+        sprintNumber: number,
+        pendingTimer: null
+      };
     }
 
     const warningTimer = msUntilWarning > 0 ? setTimeout(async () => {
@@ -819,7 +832,7 @@ client.on('interactionCreate', async interaction => {
           const guild = client.guilds.cache.get(interaction.guild.id);
           await startSprint(channelId, 'Readathon Sprint', minutes, number, carried, guild);
           await postSprintStart(channelId);
-        }, 15 * 60 * 1000)
+        }, 2 * 60 * 1000)
       };
     }, msUntilWarning) : null;
 
