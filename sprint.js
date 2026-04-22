@@ -105,9 +105,10 @@ async function writeSprintToSheets(sprintResults, guild) {
     const sheets = google.sheets({ version: 'v4', auth });
     
     const now = new Date();
+    const easternTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
-                        'July', 'August', 'September', 'October', 'November', 'December'];
-    const tabName = `${monthNames[now.getMonth()]} ${now.getFullYear()}`;
+                    'July', 'August', 'September', 'October', 'November', 'December'];
+    const tabName = `${monthNames[easternTime.getMonth()]} ${easternTime.getFullYear()}`;
     
     // Get existing sheet data
     const response = await sheets.spreadsheets.values.get({
