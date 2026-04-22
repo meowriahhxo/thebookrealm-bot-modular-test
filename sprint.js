@@ -351,8 +351,8 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
       const verb = sprintVerbs[sprint.type];
       const submitWindow = minutes <= 30 ? 5 : 7;
 const finalDeadline = Math.floor((Date.now() + submitWindow * 60 * 1000) / 1000);
-      const mentions = sprint.participants.length > 0
-        ? sprint.participants.map(id => `<@${id}>`).join(', ')
+      const mentions = sprint.originalParticipants.size > 0
+        ? [...sprint.originalParticipants].map(id => `<@${id}>`).join(', ')
         : 'everyone';
       const endEmoji = randomEmoji(type);
 
