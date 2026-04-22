@@ -500,6 +500,12 @@ async function registerCommands() {
         opt.setName('minutes')
           .setDescription('How many minutes did you participate?')
           .setRequired(true))
+      .toJSON(),
+
+  // /leave — leave the sprint without submitting time
+    new SlashCommandBuilder()
+      .setName('leave')
+      .setDescription('Leave the sprint without submitting a time')
       .toJSON()
   ];
 
@@ -569,6 +575,23 @@ client.on('interactionCreate', async interaction => {
 
     if (interaction.customId === 'deny_final') {
       await interaction.update({ content: `No worries, nothing was submitted!`, components: [] });
+    }
+
+    if (interaction.customId === 'confirm_leave') {
+      const sprint = activeSprints[channelId] || pendingSprints[channelId];
+      if (!sprint) {
+        await interaction.update({ content: 'That sprint has already ended!', components: [] });
+        return;
+      }
+      const userId = interaction.user.id;
+      sprint.participants = sprint.participants.filter(id => id !== userId);
+      sprint.originalParticipants.delete(userId);
+      await interaction.update({ content: `You've been removed from the sprint. See you next time!`, components: [] });
+      await interaction.channel.send(`<@${userId}> has left the **${sprint.type}**.`);
+    }
+
+    if (interaction.customId === 'deny_leave') {
+      await interaction.update({ content: `No problem! Use \`/final\` to submit your minutes when you're ready.`, components: [] });
     }
     return;
   }
@@ -810,6 +833,37 @@ client.on('interactionCreate', async interaction => {
     if (sprintEnded && allSubmitted && Object.keys(sprint.finalTimes).length > 0) {
       await postLeaderboard(channelId, interaction.guild);
     }
+  }
+
+    // ---- /leave ----
+  if (interaction.commandName === 'leave') {
+    const sprint = activeSprints[channelId] || pendingSprints[channelId];
+    if (!sprint) {
+      await interaction.reply({ content: `There isn't a sprint running in this channel right now.`, ephemeral: true });
+      return;
+    }
+
+    if (!sprint.participants.includes(interaction.user.id)) {
+      await interaction.reply({ content: `You haven't joined this sprint!`, ephemeral: true });
+      return;
+    }
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('confirm_leave')
+        .setLabel(`Yes, I'd like to leave the sprint`)
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId('deny_leave')
+        .setLabel(`No, I will put in my /final count`)
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    await interaction.reply({
+      content: `By using the \`/leave\` command, you will be removed from the leaderboard and any minutes you've read will not count. If you've read for more than five minutes, use the \`/final\` command, and you're all set. Would you like to leave the sprint?`,
+      components: [row],
+      flags: 64
+    });
   }
 });
 
