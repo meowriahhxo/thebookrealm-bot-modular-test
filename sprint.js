@@ -343,7 +343,7 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
     submittedUsers: new Set(),
     sprintNumber,
 
-    //Timer - fires when sprint ends
+  //Timer - fires when sprint ends
     timer: setTimeout(async () => {
       const sprint = activeSprints[channelId];
       if (!sprint) return;
@@ -357,9 +357,11 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
       const endEmoji = randomEmoji(type);
       const allAlreadySubmitted = [...sprint.originalParticipants].every(id => sprint.submittedUsers.has(id));
 
+      //Sprint Over message - only posts if not everyone has already submitted
       if (!allAlreadySubmitted) {
         await channel.send(`${endEmoji} **THE SPRINT IS OVER** ${endEmoji}\n\nThis **${sprintLabel}** is over, please put in the amount of time you ${verb}. The leaderboard will post <t:${finalDeadline}:R>, you have until then to put in your final count!\n\n✨ **Participants:**\n${mentions}`);
 
+        //2 minute reminder before window closes - posts after 3 mins
         sprint.reminderTimer = setTimeout(async () => {
           const unsubmitted = [...sprint.originalParticipants].filter(id => !sprint.submittedUsers.has(id));
           if (unsubmitted.length > 0) {
@@ -370,6 +372,7 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
 
         sprint.finalTimer = setTimeout(() => postLeaderboard(channelId, guild), submitWindow * 60 * 1000);
       } else {
+        //Everyone already submitted - post leaderboard immediately
         await postLeaderboard(channelId, guild);
       }
     }, minutes * 60 * 1000)
