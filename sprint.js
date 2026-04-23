@@ -277,7 +277,7 @@ async function writeSprintToSheets(sprintResults, guild, sprintType, sprintNumbe
     
     if (sprintType === 'Readathon Sprint') {
       await writeReadathonToSheets(sprintResults, guild, sprintNumber);
-      return;
+      // Also write to reading sprint leaderboard
     }
     
     if (sprintType !== 'Tall Tomes Sprint' && sprintType !== 'Short Stacks Sprint') {
