@@ -1,25 +1,9 @@
-const { Client, GatewayIntentBits, EmbedBuilder, REST, Routes, SlashCommandBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, REST, Routes, SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
 const { google } = require('googleapis');
 const cron = require('node-cron');
-
 const { Pool } = require('pg');
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-async function initializeDatabase() {
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS sticky_messages (
-        channel_id TEXT PRIMARY KEY,
-        channel_name TEXT,
-        message TEXT,
-        message_id TEXT
-      )
-    `);
-    console.log('Database initialized!');
-  } catch (error) {
-    console.error('Database initialization error:', error);
-  }
-}
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 const client = new Client({
   intents: [
@@ -30,6 +14,7 @@ const client = new Client({
   ]
 });
 
+// ---- HOUSE CONSTANTS ----
 const HOUSES = [
   { name: "House Asphodel", row: 43, col: 2, color: 0x92374e },
   { name: "House Dreanni", row: 43, col: 3, color: 0x84c6ff },
@@ -38,9 +23,8 @@ const HOUSES = [
 ];
 
 const monthNames = [
-  "January 2026", "February 2026", "March 2026", "April 2026",
-  "May 2026", "June 2026", "July 2026", "August 2026",
-  "September 2026", "October 2026", "November 2026", "December 2026"
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"
 ];
 
 const houseEmojis = {
@@ -57,9 +41,103 @@ const houseColors = {
   Zeldarian: 0x3eba9a
 };
 
-let lastProcessedRow = 0;
-let lastLeaderboardPost = 0;
+// ---- SPRINT CONSTANTS ----
+const activeSprints = {};
+const pendingSprints = {};
+const scheduledSprints = {};
+const cooldowns = {};
 
+const channelSprintTypes = {
+  [process.env.TALL_TOMES_CHANNEL_ID]: 'Tall Tomes Sprint',
+  [process.env.SHORT_STACKS_CHANNEL_ID]: 'Short Stacks Sprint',
+  [process.env.READATHON_CHANNEL_ID]: 'Readathon Sprint',
+  [process.env.WRITING_CHANNEL_ID]: 'Writing Sprint',
+  [process.env.ART_CHANNEL_ID]: 'Art Sprint',
+  [process.env.STUDY_CHANNEL_ID]: 'Study Sprint'
+};
+
+const sprintEmojis = {
+  'Tall Tomes Sprint': ['📚', '📖', '🔖', '🌙', '✨', '⭐'],
+  'Short Stacks Sprint': ['📚', '📖', '🔖', '🌙', '✨', '⭐'],
+  'Readathon Sprint': ['📚', '📖', '🔖', '🌙', '✨', '⭐'],
+  'Writing Sprint': ['✍️', '📝', '💫', '🖊️', '🌙', '⭐'],
+  'Art Sprint': ['🎨', '🖌️', '✨', '🌈', '💫', '🎭'],
+  'Study Sprint': ['📝', '📐', '💡', '🧠', '⭐', '🔍']
+};
+
+const sprintVerbs = {
+  'Tall Tomes Sprint': 'read',
+  'Short Stacks Sprint': 'read',
+  'Readathon Sprint': 'read',
+  'Writing Sprint': 'wrote',
+  'Art Sprint': 'created',
+  'Study Sprint': 'studied'
+};
+
+const sprintHappyVerbs = {
+  'Tall Tomes Sprint': 'Happy reading!',
+  'Short Stacks Sprint': 'Happy reading!',
+  'Readathon Sprint': 'Happy reading!',
+  'Writing Sprint': 'Happy writing!',
+  'Art Sprint': 'Happy creating!',
+  'Study Sprint': 'Happy studying!'
+};
+
+const fixedDurations = {
+  'Short Stacks Sprint': 30,
+  'Tall Tomes Sprint': 60,
+};
+
+const sprintRoles = {
+  'Tall Tomes Sprint': process.env.TALL_TOMES_ROLE_ID,
+  'Short Stacks Sprint': process.env.SHORT_STACKS_ROLE_ID,
+  'Readathon Sprint': process.env.READATHON_ROLE_ID,
+  'Writing Sprint': process.env.WRITING_ROLE_ID,
+  'Art Sprint': process.env.ART_ROLE_ID,
+  'Study Sprint': process.env.STUDY_ROLE_ID
+};
+
+// ---- DATABASE ----
+async function initializeDatabase() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sticky_messages (
+        channel_id TEXT PRIMARY KEY,
+        channel_name TEXT,
+        message TEXT,
+        message_id TEXT
+      )
+    `);
+    console.log('Database initialized!');
+  } catch (error) {
+    console.error('Database initialization error:', error);
+  }
+}
+
+async function getStickyMessages() {
+  const result = await pool.query('SELECT * FROM sticky_messages');
+  return result.rows;
+}
+
+async function getStickyByChannel(channelId) {
+  const result = await pool.query('SELECT * FROM sticky_messages WHERE channel_id = $1', [channelId]);
+  return result.rows[0] || null;
+}
+
+async function saveStickyMessage(channelName, channelId, message, messageId) {
+  await pool.query(`
+    INSERT INTO sticky_messages (channel_id, channel_name, message, message_id)
+    VALUES ($1, $2, $3, $4)
+    ON CONFLICT (channel_id) DO UPDATE
+    SET channel_name = $2, message = $3, message_id = $4
+  `, [channelId, channelName, message, messageId]);
+}
+
+async function deleteStickyMessage(channelId) {
+  await pool.query('DELETE FROM sticky_messages WHERE channel_id = $1', [channelId]);
+}
+
+// ---- GOOGLE AUTH ----
 async function getAuth() {
   const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
   return new google.auth.GoogleAuth({
@@ -68,12 +146,15 @@ async function getAuth() {
   });
 }
 
+// ---- LEADERBOARD ----
+let lastLeaderboardPost = 0;
+
 async function getSheetData() {
   const auth = await getAuth();
   const sheets = google.sheets({ version: 'v4', auth });
   const easternTime = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  const currentMonth = monthNames[easternTime.getMonth()];
-  
+  const currentMonth = `${monthNames[easternTime.getMonth()]} ${easternTime.getFullYear()}`;
+
   const housePoints = [];
   for (const house of HOUSES) {
     const col = String.fromCharCode(64 + house.col);
@@ -92,7 +173,8 @@ async function getSheetData() {
 function buildLeaderboardEmbed(housePoints) {
   const sorted = [...housePoints].sort((a, b) => b.points - a.points);
   const medals = ["🥇", "🥈", "🥉", "4️⃣"];
-  const month = monthNames[new Date().getMonth()];
+  const easternTime = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const month = `${monthNames[easternTime.getMonth()]} ${easternTime.getFullYear()}`;
   const gap = (sorted[0].points - sorted[1].points).toLocaleString();
 
   const embed = new EmbedBuilder()
@@ -114,11 +196,11 @@ function buildLeaderboardEmbed(housePoints) {
   return embed;
 }
 
-async function postLeaderboard() {
+async function postHouseLeaderboard() {
   const now = Date.now();
   if (now - lastLeaderboardPost < 60000) return;
   lastLeaderboardPost = now;
-  
+
   try {
     const housePoints = await getSheetData();
     const embed = buildLeaderboardEmbed(housePoints);
@@ -129,6 +211,9 @@ async function postLeaderboard() {
     console.error('Error posting leaderboard:', error);
   }
 }
+
+// ---- SORTING QUIZ ----
+let lastProcessedRow = 0;
 
 async function initializeLastProcessedRow() {
   try {
@@ -147,82 +232,67 @@ async function initializeLastProcessedRow() {
 
 async function processQuizSubmission(row, rowNumber) {
   const houseCounts = { Asphodel: 0, Dreanni: 0, Laiidon: 0, Zeldarian: 0 };
-  
+
   const memberName = row[1] || 'Unknown';
   const submissionNumber = rowNumber - 1;
 
   const answers = [
-    //question one - If extra lives were a thing how would you get them?
     { answer: "Looking at academic studies and choosing the most accessible way.", house: "Laiidon" },
     { answer: "Making people happy and making them laugh.", house: "Dreanni" },
     { answer: "Going on a quest to get an extra life.", house: "Zeldarian" },
     { answer: "By showing compassion/performing acts of kindness for others", house: "Asphodel" },
-    //quesiton two - What would your strategy be for an apocalypse?
     { answer: "Make allies with as many people as I can so that we could work together.", house: "Dreanni" },
     { answer: "Use the resources around me and prioritize safety and rationing food.", house: "Laiidon" },
     { answer: "Talk out your differences with the zombies and make a peace treaty.", house: "Zeldarian" },
     { answer: "Hunker down with and protect those I love most", house: "Asphodel" },
-    //question three - What is your favourite season?
     { answer: "Spring", house: "Zeldarian" },
     { answer: "Summer", house: "Dreanni" },
     { answer: "Autumn / Fall", house: "Laiidon" },
     { answer: "Winter", house: "Asphodel" },
-    //question four - What would you bring with you to a deserted island?
     { answer: "A phone so that I can call for help and read e-books while waiting", house: "Zeldarian" },
     { answer: "A journal containing personal rituals and spells and a solar charger", house: "Asphodel" },
     { answer: "Books related to botany so I know what is safe to eat.", house: "Laiidon" },
     { answer: "Is it possible to bring another person with me?", house: "Dreanni" },
-    //question five - What do you value most in people?
     { answer: "Their ability to make the best out of any situation", house: "Dreanni" },
     { answer: "Their ability to be respectful of others opinions", house: "Laiidon" },
     { answer: "Their ability to be discreetly supportive and sarcastic", house: "Zeldarian" },
     { answer: "Their ability to be honest", house: "Asphodel" },
-    //question six - If you could level up any aspect of yourself what would it be?
     { answer: "Not sacrificing your own happiness to make other people happy", house: "Dreanni" },
     { answer: "Being better at dealing with emotions", house: "Laiidon" },
     { answer: "Socializing", house: "Zeldarian" },
     { answer: "Not caring what other people think and just being your authentic self", house: "Asphodel" },
-    //question seven - Is there a meaning to life? If so, what is it?
     { answer: "Being happy and not caring what other people think", house: "Asphodel" },
     { answer: "Making every moment filled with laughter and experience", house: "Zeldarian" },
     { answer: "Making the best memories and friendships and living life to the fullest", house: "Dreanni" },
     { answer: "Making the most out of your life through having a bunch of hobbies", house: "Laiidon" },
-    //question eight - What should be the goal of humanity?
     { answer: "Learning from experiences and mistakes so that there's empathy everywhere", house: "Zeldarian" },
     { answer: "Embracing the beauty in all aspects of life while advocating for justice and compassion", house: "Asphodel" },
     { answer: "Expanding our knowledge of the world and helping people so no one has to live in poverty", house: "Laiidon" },
     { answer: "Working together as a whole to help make the world better.", house: "Dreanni" },
-    //question nine - How would you like to be remembered after you are gone?
     { answer: "By being the person everyone wishes to have by their side when they're going through tough times", house: "Zeldarian" },
     { answer: "For being myself and showing kindness to everyone, and being just generally an awesome accepting person", house: "Asphodel" },
     { answer: "For my successes in life", house: "Laiidon" },
     { answer: "For the people that I have helped.", house: "Dreanni" },
-    //question ten - You have been transported to a magical land what’s the first thing you do?
     { answer: "Ask if dragons or magical creatures exist", house: "Asphodel" },
     { answer: "Make friends with the nearest magical being. I have to know everyone!", house: "Dreanni" },
     { answer: "So many opportunities…...what to choose?", house: "Zeldarian" },
     { answer: "Explore the nearest village and try to blend in", house: "Laiidon" },
-    //question eleven - What fantasy being would you want to be?
     { answer: "A magic user", house: "Laiidon" },
     { answer: "A siren", house: "Asphodel" },
     { answer: "An elf", house: "Zeldarian" },
     { answer: "A werewolf", house: "Dreanni" },
-    //question twelve - What steps do you take to remain calm under pressure?
     { answer: "Silently regret all your life decisions that have lead to this point in your life", house: "Asphodel" },
     { answer: "Talk to myself, and remind myself that i have it under control (even when I don't)", house: "Zeldarian" },
     { answer: "Cope with humor", house: "Dreanni" },
     { answer: "Practically think about all possible outcomes of the situation", house: "Laiidon" },
-    //quesiton thirteen - What vacation destination sounds more appealing to you?
     { answer: "Hawaii", house: "Dreanni" },
     { answer: "Japan", house: "Zeldarian" },
     { answer: "Italy", house: "Laiidon" },
     { answer: "Ancient Greece", house: "Asphodel" },
-    //question fourteen - What trait would your friends use to best describe you?
     { answer: "Goofy", house: "Zeldarian" },
     { answer: "Trustworthy", house: "Dreanni" },
     { answer: "Compassionate", house: "Asphodel" },
     { answer: "Opinionated", house: "Laiidon" },
-    //question fifteen - If you weren’t reading a book, what would you typically find yourself doing in your spare time?
     { answer: "Practicing my musical instrument", house: "Laiidon" },
     { answer: "Being on social media", house: "Dreanni" },
     { answer: "Unwinding with another hobby I've collected", house: "Asphodel" },
@@ -254,9 +324,9 @@ async function processQuizSubmission(row, rowNumber) {
     );
 
   const channel = await client.channels.fetch(process.env.SORTING_CHANNEL_ID);
-  await channel.send({ 
+  await channel.send({
     content: `<@&${process.env.MOD_ROLE_ID}> A new member has completed the sorting quiz!`,
-    embeds: [embed] 
+    embeds: [embed]
   });
 }
 
@@ -264,49 +334,414 @@ async function checkForNewQuizSubmissions() {
   try {
     const auth = await getAuth();
     const sheets = google.sheets({ version: 'v4', auth });
-    
+
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: process.env.SORTING_QUIZ_SPREADSHEET_ID,
       range: 'A:Z',
       valueRenderOption: 'UNFORMATTED_VALUE'
     });
-    
+
     const rows = response.data.values || [];
     if (rows.length <= lastProcessedRow) return;
-    
+
     for (let i = lastProcessedRow; i < rows.length; i++) {
       await processQuizSubmission(rows[i], i + 1);
     }
-    
+
     lastProcessedRow = rows.length;
   } catch (error) {
     console.error('Error checking quiz submissions:', error);
   }
 }
 
-async function getStickyMessages() {
-  const result = await pool.query('SELECT * FROM sticky_messages');
-  return result.rows;
+// ---- SPRINT HELPERS ----
+function randomEmoji(type) {
+  const pool = sprintEmojis[type];
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
-async function getStickyByChannel(channelId) {
-  const result = await pool.query('SELECT * FROM sticky_messages WHERE channel_id = $1', [channelId]);
-  return result.rows[0] || null;
+function isGMT() {
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const lastSundayMarch = new Date(Date.UTC(year, 2, 31));
+  lastSundayMarch.setUTCDate(31 - lastSundayMarch.getUTCDay());
+  const lastSundayOctober = new Date(Date.UTC(year, 9, 31));
+  lastSundayOctober.setUTCDate(31 - lastSundayOctober.getUTCDay());
+  return now < lastSundayMarch || now >= lastSundayOctober;
 }
 
-async function saveStickyMessage(channelName, channelId, message, messageId) {
-  await pool.query(`
-    INSERT INTO sticky_messages (channel_id, channel_name, message, message_id)
-    VALUES ($1, $2, $3, $4)
-    ON CONFLICT (channel_id) DO UPDATE
-    SET channel_name = $2, message = $3, message_id = $4
-  `, [channelId, channelName, message, messageId]);
+function parseTimeToUTC(timeStr, dateStr = null) {
+  const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+  if (!match) return null;
+
+  let hours = parseInt(match[1]);
+  const minutes = parseInt(match[2]);
+  const meridiem = match[3];
+
+  if (meridiem) {
+    if (meridiem.toUpperCase() === 'PM' && hours !== 12) hours += 12;
+    if (meridiem.toUpperCase() === 'AM' && hours === 12) hours = 0;
+  }
+
+  const offset = isGMT() ? 0 : 1;
+
+  let year, month, day;
+  if (dateStr) {
+    const dateParts = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (!dateParts) return null;
+    day = parseInt(dateParts[1]);
+    month = parseInt(dateParts[2]) - 1;
+    year = parseInt(dateParts[3]);
+  } else {
+    const now = new Date();
+    year = now.getUTCFullYear();
+    month = now.getUTCMonth();
+    day = now.getUTCDate();
+  }
+
+  const target = new Date(Date.UTC(year, month, day, hours - offset, minutes));
+  if (!dateStr && target <= new Date()) target.setUTCDate(target.getUTCDate() + 1);
+  return target;
 }
 
-async function deleteStickyMessage(channelId) {
-  await pool.query('DELETE FROM sticky_messages WHERE channel_id = $1', [channelId]);
+// ---- SPRINT FUNCTIONS ----
+async function startSprint(channelId, type, minutes, sprintNumber = null, carriedParticipants = [], guild = null) {
+  const channel = await client.channels.fetch(channelId);
+  const endTime = Math.floor((Date.now() + minutes * 60 * 1000) / 1000);
+  const sprintLabel = sprintNumber ? `Readathon Sprint #${sprintNumber}` : type;
+
+  activeSprints[channelId] = {
+    type,
+    duration: minutes,
+    startTime: Date.now(),
+    endTime: Date.now() + minutes * 60 * 1000,
+    participants: [...carriedParticipants],
+    originalParticipants: new Set(carriedParticipants),
+    finalTimes: {},
+    submittedUsers: new Set(),
+    sprintNumber,
+
+    timer: setTimeout(async () => {
+      const sprint = activeSprints[channelId];
+      if (!sprint) return;
+
+      const verb = sprintVerbs[sprint.type];
+      const submitWindow = minutes <= 30 ? 5 : 7;
+      const finalDeadline = Math.floor((Date.now() + submitWindow * 60 * 1000) / 1000);
+      const mentions = sprint.originalParticipants.size > 0
+        ? [...sprint.originalParticipants].map(id => `<@${id}>`).join(', ')
+        : null;
+      const endEmoji = randomEmoji(type);
+
+      const participantText = mentions ? `\n\n✨ **Participants:**\n${mentions}` : '\n\n✨ **Participants:**';
+      await channel.send(`${endEmoji} **THE SPRINT IS OVER** ${endEmoji}\n\nThis **${sprintLabel}** is over, please put in the amount of time you ${verb}. The leaderboard will post <t:${finalDeadline}:R>, you have until then to put in your final count!${participantText}`);
+
+      sprint.reminderTimer = setTimeout(async () => {
+        const unsubmitted = [...sprint.originalParticipants].filter(id => !sprint.submittedUsers.has(id));
+        if (unsubmitted.length > 0) {
+          const reminderMentions = unsubmitted.map(id => `<@${id}>`).join(', ');
+          await channel.send(`‼️ **Reminder:**\n${reminderMentions}\nYou have 2 minutes left to submit your final time with \`/final\`!`);
+        }
+      }, (submitWindow - 2) * 60 * 1000);
+
+      const allAlreadySubmitted = [...sprint.originalParticipants].every(id => sprint.submittedUsers.has(id));
+      if (allAlreadySubmitted && Object.keys(sprint.finalTimes).length > 0) {
+        await postLeaderboard(channelId, guild);
+      } else {
+        sprint.finalTimer = setTimeout(() => postLeaderboard(channelId, guild), submitWindow * 60 * 1000);
+      }
+    }, minutes * 60 * 1000)
+  };
 }
 
+async function postSprintStart(channelId) {
+  const sprint = activeSprints[channelId];
+  if (!sprint) return;
+
+  const channel = await client.channels.fetch(channelId);
+  const emoji = randomEmoji(sprint.type);
+  const happyVerb = sprintHappyVerbs[sprint.type];
+  const endTime = Math.floor(sprint.endTime / 1000);
+  const sprintLabel = sprint.sprintNumber ? `Readathon Sprint #${sprint.sprintNumber}` : sprint.type;
+  const mentions = sprint.participants.length > 0
+    ? sprint.participants.map(id => `<@${id}>`).join(', ')
+    : '';
+
+  await channel.send(`${emoji} **START SPRINTING** ${emoji}\n\nThe **${sprintLabel}** has begun. the sprint will end <t:${endTime}:R>, at <t:${endTime}:t>. ${happyVerb}\n\n✨ **Participants:**\n${mentions}`);
+}
+
+async function postLeaderboard(channelId, guild) {
+  const sprint = activeSprints[channelId];
+  if (!sprint) return;
+
+  const channel = await client.channels.fetch(channelId);
+  const sorted = Object.entries(sprint.finalTimes).sort((a, b) => b[1] - a[1]);
+  const totalTime = sorted.reduce((sum, [, mins]) => sum + mins, 0);
+
+  let leaderboard = '🏆 **GREAT JOB EVERYONE** 🏆\n\n';
+  let currentRank = 1;
+  let previousTime = null;
+  let displayRank = 1;
+
+  for (let i = 0; i < sorted.length; i++) {
+    const [userId, minutes] = sorted[i];
+    if (minutes === previousTime) {
+      leaderboard += `= ${displayRank}. <@${userId}> — **${minutes} minutes**\n`;
+    } else {
+      displayRank = currentRank;
+      leaderboard += `${displayRank}. <@${userId}> — **${minutes} minutes**\n`;
+      previousTime = minutes;
+    }
+    currentRank++;
+  }
+
+  leaderboard += `\nMinutes Read: **${totalTime} minutes** in a **${sprint.duration} minute** sprint!\n`;
+  leaderboard += `\nThanks for joining us. You can use the \`/sprint\` command to start another sprint!\n\n`;
+
+  await channel.send(leaderboard);
+
+  clearTimeout(sprint.timer);
+  clearTimeout(sprint.finalTimer);
+  clearTimeout(sprint.reminderTimer);
+  await writeSprintToSheets(sprint.finalTimes, guild, sprint.type, sprint.sprintNumber);
+  delete activeSprints[channelId];
+}
+
+// ---- SPRINT SHEETS FUNCTIONS ----
+async function writeCreativeSprints(sprintResults, guild, sprintType) {
+  try {
+    const auth = await getAuth();
+    const sheets = google.sheets({ version: 'v4', auth });
+
+    const sprintPointsCells = {
+      'Writing Sprint': { Asphodel: 'B7', Dreanni: 'C7', Laiidon: 'D7', Zeldarian: 'E7' },
+      'Study Sprint':   { Asphodel: 'B8', Dreanni: 'C8', Laiidon: 'D8', Zeldarian: 'E8' },
+      'Art Sprint':     { Asphodel: 'B9', Dreanni: 'C9', Laiidon: 'D9', Zeldarian: 'E9' }
+    };
+
+    const houseRoles = {
+      [process.env.ASPHODEL_ROLE_ID]: 'Asphodel',
+      [process.env.DREANNI_ROLE_ID]: 'Dreanni',
+      [process.env.LAIIDON_ROLE_ID]: 'Laiidon',
+      [process.env.ZELDARIAN_ROLE_ID]: 'Zeldarian'
+    };
+
+    const houseTotals = { Asphodel: 0, Dreanni: 0, Laiidon: 0, Zeldarian: 0 };
+
+    for (const [userId, minutes] of Object.entries(sprintResults)) {
+      let member;
+      try {
+        member = await guild.members.fetch(userId);
+      } catch (e) {
+        continue;
+      }
+
+      let house = null;
+      for (const [roleId, houseName] of Object.entries(houseRoles)) {
+        if (member.roles.cache.has(roleId)) {
+          house = houseName;
+          break;
+        }
+      }
+
+      if (!house) continue;
+      houseTotals[house] += minutes;
+    }
+
+    const now = new Date();
+    const easternTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const tabName = `${monthNames[easternTime.getMonth()]} ${easternTime.getFullYear()}`;
+
+    for (const [house, minutes] of Object.entries(houseTotals)) {
+      if (minutes === 0) continue;
+      const cell = sprintPointsCells[sprintType][house];
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId: process.env.POINTS_SPREADSHEET_ID,
+        range: `${tabName}!${cell}`,
+        valueRenderOption: 'UNFORMATTED_VALUE'
+      });
+      const current = parseFloat(response.data.values?.[0]?.[0]) || 0;
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: process.env.POINTS_SPREADSHEET_ID,
+        range: `${tabName}!${cell}`,
+        valueInputOption: 'RAW',
+        requestBody: { values: [[current + minutes]] }
+      });
+    }
+
+    console.log(`${sprintType} results written to Points spreadsheet!`);
+  } catch (error) {
+    console.error(`Error writing ${sprintType} to Points spreadsheet:`, error);
+  }
+}
+
+async function writeReadathonToSheets(sprintResults, guild, sprintNumber) {
+  try {
+    const auth = await getAuth();
+    const sheets = google.sheets({ version: 'v4', auth });
+
+    const now = new Date();
+    const easternTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const tabName = `${monthNames[easternTime.getMonth()]} ${easternTime.getFullYear()}`;
+    const sprintCol = String.fromCharCode(65 + 3 + (sprintNumber - 1));
+
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.READATHON_LEADERBOARD_ID,
+      range: `${tabName}!A:C`,
+    });
+
+    const rows = response.data.values || [];
+
+    const houseRoles = {
+      [process.env.ASPHODEL_ROLE_ID]: 'Asphodel',
+      [process.env.DREANNI_ROLE_ID]: 'Dreanni',
+      [process.env.LAIIDON_ROLE_ID]: 'Laiidon',
+      [process.env.ZELDARIAN_ROLE_ID]: 'Zeldarian'
+    };
+
+    for (const [userId, minutes] of Object.entries(sprintResults)) {
+      let member;
+      try {
+        member = await guild.members.fetch(userId);
+      } catch (e) {
+        continue;
+      }
+
+      let house = null;
+      for (const [roleId, houseName] of Object.entries(houseRoles)) {
+        if (member.roles.cache.has(roleId)) {
+          house = houseName;
+          break;
+        }
+      }
+
+      if (!house) continue;
+
+      const displayName = member.displayName;
+      const existingRowIndex = rows.findIndex(row => row[2] === userId);
+
+      if (existingRowIndex !== -1) {
+        const rowNumber = existingRowIndex + 1;
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: process.env.READATHON_LEADERBOARD_ID,
+          range: `${tabName}!${sprintCol}${rowNumber}`,
+          valueInputOption: 'RAW',
+          requestBody: { values: [[minutes]] }
+        });
+      } else {
+        await sheets.spreadsheets.values.append({
+          spreadsheetId: process.env.READATHON_LEADERBOARD_ID,
+          range: `${tabName}!A:C`,
+          valueInputOption: 'RAW',
+          requestBody: { values: [[house, displayName, userId]] }
+        });
+
+        const newResponse = await sheets.spreadsheets.values.get({
+          spreadsheetId: process.env.READATHON_LEADERBOARD_ID,
+          range: `${tabName}!A:C`,
+        });
+        const newRows = newResponse.data.values || [];
+        const newRowIndex = newRows.findIndex(row => row[2] === userId);
+        if (newRowIndex !== -1) {
+          await sheets.spreadsheets.values.update({
+            spreadsheetId: process.env.READATHON_LEADERBOARD_ID,
+            range: `${tabName}!${sprintCol}${newRowIndex + 1}`,
+            valueInputOption: 'RAW',
+            requestBody: { values: [[minutes]] }
+          });
+        }
+      }
+    }
+    console.log(`Readathon Sprint #${sprintNumber} results written to Readathon Leaderboard!`);
+  } catch (error) {
+    console.error('Error writing to Readathon Leaderboard:', error);
+  }
+}
+
+async function writeSprintToSheets(sprintResults, guild, sprintType, sprintNumber = null) {
+  try {
+    if (sprintType === 'Writing Sprint' || sprintType === 'Art Sprint' || sprintType === 'Study Sprint') {
+      await writeCreativeSprints(sprintResults, guild, sprintType);
+      return;
+    }
+
+    if (sprintType === 'Readathon Sprint') {
+      await writeReadathonToSheets(sprintResults, guild, sprintNumber);
+    }
+
+    if (sprintType !== 'Tall Tomes Sprint' && sprintType !== 'Short Stacks Sprint' && sprintType !== 'Readathon Sprint') {
+      return;
+    }
+
+    const auth = await getAuth();
+    const sheets = google.sheets({ version: 'v4', auth });
+
+    const now = new Date();
+    const easternTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const tabName = `${monthNames[easternTime.getMonth()]} ${easternTime.getFullYear()}`;
+
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: process.env.SPRINT_LEADERBOARD_ID,
+      range: `${tabName}!A:E`,
+    });
+
+    const rows = response.data.values || [];
+
+    for (const [userId, minutes] of Object.entries(sprintResults)) {
+      let member;
+      try {
+        member = await guild.members.fetch(userId);
+      } catch (e) {
+        continue;
+      }
+
+      const houseRoles = {
+        [process.env.ASPHODEL_ROLE_ID]: 'Asphodel',
+        [process.env.DREANNI_ROLE_ID]: 'Dreanni',
+        [process.env.LAIIDON_ROLE_ID]: 'Laiidon',
+        [process.env.ZELDARIAN_ROLE_ID]: 'Zeldarian'
+      };
+
+      let house = null;
+      for (const [roleId, houseName] of Object.entries(houseRoles)) {
+        if (member.roles.cache.has(roleId)) {
+          house = houseName;
+          break;
+        }
+      }
+
+      if (!house) continue;
+
+      const displayName = member.displayName;
+      const existingRowIndex = rows.findIndex(row => row[4] === userId);
+
+      if (existingRowIndex !== -1) {
+        const currentMinutes = parseFloat(rows[existingRowIndex][2]) || 0;
+        const currentSprints = parseInt(rows[existingRowIndex][3]) || 0;
+        const rowNumber = existingRowIndex + 1;
+
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: process.env.SPRINT_LEADERBOARD_ID,
+          range: `${tabName}!C${rowNumber}:D${rowNumber}`,
+          valueInputOption: 'RAW',
+          requestBody: { values: [[currentMinutes + minutes, currentSprints + 1]] }
+        });
+      } else {
+        await sheets.spreadsheets.values.append({
+          spreadsheetId: process.env.SPRINT_LEADERBOARD_ID,
+          range: `${tabName}!A:E`,
+          valueInputOption: 'RAW',
+          requestBody: { values: [[house, displayName, minutes, 1, userId]] }
+        });
+      }
+    }
+    console.log('Sprint results written to Google Sheets!');
+  } catch (error) {
+    console.error('Error writing to Google Sheets:', error);
+  }
+}
+
+// ---- COMMAND REGISTRATION ----
 async function registerCommands() {
   const commands = [
     new SlashCommandBuilder()
@@ -335,22 +770,83 @@ async function registerCommands() {
       .setName('unstick')
       .setDescription('Remove the sticky message from this channel')
       .setDefaultMemberPermissions(8)
-      .toJSON()
+      .toJSON(),
+    new SlashCommandBuilder()
+      .setName('sprint')
+      .setDescription('Start a sprint in this channel')
+      .addStringOption(opt =>
+        opt.setName('input')
+          .setDescription('Sprint length and delay to begin')
+          .setRequired(true))
+      .toJSON(),
+    new SlashCommandBuilder()
+      .setName('schedule')
+      .setDescription('Schedule a sprint')
+      .addIntegerOption(opt =>
+        opt.setName('number')
+          .setDescription('Sprint number')
+          .setRequired(true))
+      .addIntegerOption(opt =>
+        opt.setName('minutes')
+          .setDescription('Duration in minutes')
+          .setRequired(true))
+      .addStringOption(opt =>
+        opt.setName('time')
+          .setDescription('Start time in BST/GMT')
+          .setRequired(true))
+      .addStringOption(opt =>
+        opt.setName('date')
+          .setDescription('Date in DD/MM/YYYY format. Leave blank for today.')
+          .setRequired(false))
+      .addRoleOption(opt =>
+        opt.setName('pingrole')
+          .setDescription('Role to ping for the 15 minute warning - defaults to Readathon')
+          .setRequired(false))
+      .toJSON(),
+    new SlashCommandBuilder()
+      .setName('cancel')
+      .setDescription('Cancel the active or upcoming sprint in this channel')
+      .addIntegerOption(opt =>
+        opt.setName('number')
+          .setDescription('Readathon sprint number to cancel (optional)')
+          .setRequired(false))
+      .toJSON(),
+    new SlashCommandBuilder()
+      .setName('join')
+      .setDescription('Join the active sprint in this channel')
+      .toJSON(),
+    new SlashCommandBuilder()
+      .setName('time')
+      .setDescription('Check how much time is left in the sprint')
+      .toJSON(),
+    new SlashCommandBuilder()
+      .setName('final')
+      .setDescription('Submit your final minutes read count')
+      .addIntegerOption(opt =>
+        opt.setName('minutes')
+          .setDescription('How many minutes did you participate?')
+          .setRequired(true))
+      .toJSON(),
+    new SlashCommandBuilder()
+      .setName('leave')
+      .setDescription('Leave the sprint without submitting a time')
+      .toJSON(),
   ];
 
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
   await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID), { body: commands });
-  console.log('Slash commands registered!');
+  console.log('All commands registered!');
 }
 
+// ---- BOT READY ----
 client.once('clientReady', async () => {
   console.log(`Bot is online as ${client.user.tag}!`);
   await initializeDatabase();
   await initializeLastProcessedRow();
   await registerCommands();
-  
+
   cron.schedule('*/30 * * * *', () => {
-    postLeaderboard();
+    postHouseLeaderboard();
   });
 
   cron.schedule('* * * * *', () => {
@@ -358,9 +854,88 @@ client.once('clientReady', async () => {
   });
 });
 
+// ---- INTERACTION HANDLER ----
 client.on('interactionCreate', async interaction => {
+  const channelId = interaction.channelId;
+
+  // ---- BUTTON INTERACTIONS ----
+  if (interaction.isButton()) {
+    if (interaction.customId === 'confirm_cancel') {
+      const sprint = activeSprints[channelId] || pendingSprints[channelId];
+      if (!sprint) {
+        await interaction.update({ content: 'No sprint to cancel!', components: [] });
+        return;
+      }
+      const roleId = sprintRoles[sprint.type];
+      clearTimeout(sprint.timer);
+      clearTimeout(sprint.pendingTimer);
+      clearTimeout(sprint.warningTimer);
+      clearTimeout(sprint.finalTimer);
+      clearTimeout(sprint.reminderTimer);
+      delete activeSprints[channelId];
+      delete pendingSprints[channelId];
+      await interaction.update({ content: `The **${sprint.type}** has been cancelled. <@&${roleId}>`, components: [] });
+    }
+
+    if (interaction.customId === 'deny_cancel') {
+      const sprint = activeSprints[channelId] || pendingSprints[channelId];
+      const happyVerb = sprint ? sprintHappyVerbs[sprint.type] : 'Happy reading!';
+      await interaction.update({ content: `The sprint remains! ${happyVerb}`, components: [] });
+    }
+
+    if (interaction.customId.startsWith('confirm_final_')) {
+      const parts = interaction.customId.split('_');
+      const minutes = parseInt(parts[2]);
+      const userId = parts[3];
+
+      const sprint = activeSprints[channelId];
+      if (!sprint) {
+        await interaction.update({ content: 'That sprint has already ended!', components: [] });
+        return;
+      }
+
+      sprint.finalTimes[userId] = minutes;
+      sprint.submittedUsers.add(userId);
+      sprint.originalParticipants.add(userId);
+      sprint.participants = sprint.participants.filter(id => id !== userId);
+
+      await interaction.update({ content: `Got it! Your **${minutes} minutes** have been logged.`, components: [] });
+      const sprintVerb = activeSprints[channelId] ? sprintVerbs[activeSprints[channelId].type] : 'read';
+      await interaction.channel.send(`<@${userId}> has ${sprintVerb} for **${minutes} minutes**!`);
+
+      const sprintEnded = Date.now() >= sprint.endTime;
+      const allSubmitted = [...sprint.originalParticipants].every(id => sprint.submittedUsers.has(id));
+      if (sprintEnded && allSubmitted && Object.keys(sprint.finalTimes).length > 0) {
+        await postLeaderboard(channelId, interaction.guild);
+      }
+    }
+
+    if (interaction.customId === 'deny_final') {
+      await interaction.update({ content: `No worries, nothing was submitted!`, components: [] });
+    }
+
+    if (interaction.customId === 'confirm_leave') {
+      const sprint = activeSprints[channelId] || pendingSprints[channelId];
+      if (!sprint) {
+        await interaction.update({ content: 'That sprint has already ended!', components: [] });
+        return;
+      }
+      const userId = interaction.user.id;
+      sprint.participants = sprint.participants.filter(id => id !== userId);
+      sprint.originalParticipants.delete(userId);
+      await interaction.update({ content: `You've been removed from the sprint. See you next time!`, components: [] });
+      await interaction.channel.send(`<@${userId}> has left the **${sprint.type}**.`);
+    }
+
+    if (interaction.customId === 'deny_leave') {
+      await interaction.update({ content: `No problem! Use \`/final\` to submit your minutes when you're ready.`, components: [] });
+    }
+    return;
+  }
+
   if (!interaction.isChatInputCommand()) return;
-  
+
+  // ---- /leaderboard ----
   if (interaction.commandName === 'leaderboard') {
     try {
       await interaction.deferReply();
@@ -372,6 +947,7 @@ client.on('interactionCreate', async interaction => {
     }
   }
 
+  // ---- /stick ----
   if (interaction.commandName === 'stick') {
     try {
       await interaction.deferReply({ flags: 64 });
@@ -389,11 +965,11 @@ client.on('interactionCreate', async interaction => {
       await interaction.editReply({ content: 'Sticky message set!' });
     } catch (error) {
       console.error('Error setting sticky message:', error);
-      await interaction.reply({ content: 'Something went wrong!', ephemeral: true });
     }
   }
 
-if (interaction.commandName === 'editstick') {
+  // ---- /editstick ----
+  if (interaction.commandName === 'editstick') {
     try {
       await interaction.deferReply({ flags: 64 });
       const message = interaction.options.getString('message');
@@ -417,6 +993,7 @@ if (interaction.commandName === 'editstick') {
     }
   }
 
+  // ---- /unstick ----
   if (interaction.commandName === 'unstick') {
     try {
       await interaction.deferReply({ flags: 64 });
@@ -438,23 +1015,474 @@ if (interaction.commandName === 'editstick') {
       console.error('Error removing sticky message:', error);
     }
   }
+
+  // ---- /sprint ----
+  if (interaction.commandName === 'sprint') {
+    const type = channelSprintTypes[channelId];
+    if (!type) {
+      await interaction.reply({ content: 'This channel isn\'t set up for sprints!', ephemeral: true });
+      return;
+    }
+
+    if (activeSprints[channelId] || pendingSprints[channelId]) {
+      await interaction.reply({ content: `There's already a sprint running in this channel that will end <t:${Math.floor((activeSprints[channelId]?.endTime || pendingSprints[channelId]?.startsAt) / 1000)}:R>! If you'd like to join, use the \`/join\` command!`, ephemeral: true });
+      return;
+    }
+
+    const input = interaction.options.getString('input').trim().split(/\s+/);
+    const inputMinutes = parseInt(input[0]);
+    const startsIn = parseInt(input[1]) || 1;
+
+    let minutes;
+    if (fixedDurations[type]) {
+      minutes = fixedDurations[type];
+    } else {
+      if (!inputMinutes || inputMinutes < 1 || inputMinutes > 60) {
+        await interaction.reply({ content: `Please provide a duration between 15 and 60 minutes for a **${type}**!`, ephemeral: true });
+        return;
+      }
+      minutes = inputMinutes;
+    }
+
+    const startsAt = Date.now() + startsIn * 60 * 1000;
+    const startsAtTimestamp = Math.floor(startsAt / 1000);
+    const announceEmoji = randomEmoji(type);
+
+    await interaction.reply(`${announceEmoji} **JOIN THE SPRINT** ${announceEmoji}\n\nThe next **${type}** runs for **${minutes} minutes** and will begin <t:${startsAtTimestamp}:R>.\n\nUse \`/join\` to join and \`/final\` if you have to leave early!`);
+
+    pendingSprints[channelId] = {
+      type,
+      duration: minutes,
+      startsAt,
+      guildId: interaction.guild.id,
+      participants: [],
+      pendingTimer: setTimeout(async () => {
+        const pending = pendingSprints[channelId];
+        const carriedParticipants = pending ? [...pending.participants] : [];
+        delete pendingSprints[channelId];
+        const guild = client.guilds.cache.get(pending.guildId);
+        await startSprint(channelId, type, minutes, null, carriedParticipants, guild);
+        await postSprintStart(channelId);
+      }, startsIn * 60 * 1000)
+    };
+  }
+
+  // ---- /schedule ----
+  if (interaction.commandName === 'schedule') {
+    const type = channelSprintTypes[channelId];
+    if (!type) {
+      await interaction.reply({ content: 'This channel isn\'t set up for sprints!', ephemeral: true });
+      return;
+    }
+
+    const number = interaction.options.getInteger('number');
+    const minutes = interaction.options.getInteger('minutes');
+    const timeStr = interaction.options.getString('time');
+    const dateStr = interaction.options.getString('date');
+    const pingRole = interaction.options.getRole('pingrole');
+    const roleId = pingRole ? pingRole.id : process.env.READATHON_ROLE_ID;
+
+    const startTime = parseTimeToUTC(timeStr, dateStr);
+    if (!startTime) {
+      await interaction.reply({ content: 'Invalid time or date format! Use time like `3:00PM` or `15:00`, and date like `02/05/2026`.', ephemeral: true });
+      return;
+    }
+
+    const msUntilStart = startTime.getTime() - Date.now();
+    const msUntilWarning = msUntilStart - 2 * 60 * 1000;
+    const startTimestamp = Math.floor(startTime.getTime() / 1000);
+
+    if (msUntilStart <= 0) {
+      await interaction.reply({ content: 'That time has already passed!', ephemeral: true });
+      return;
+    }
+
+    if (!scheduledSprints[channelId]) scheduledSprints[channelId] = [];
+
+    if (scheduledSprints[channelId].find(s => s.number === number)) {
+      await interaction.reply({ content: `Readathon Sprint #${number} is already scheduled!`, ephemeral: true });
+      return;
+    }
+
+    if (msUntilWarning <= 0) {
+      pendingSprints[channelId] = {
+        type: 'Readathon Sprint',
+        duration: minutes,
+        startsAt: startTime.getTime(),
+        guildId: interaction.guild.id,
+        participants: [],
+        sprintNumber: number,
+        pendingTimer: null
+      };
+    }
+
+    const warningTimer = msUntilWarning > 0 ? setTimeout(async () => {
+      const channel = await client.channels.fetch(channelId);
+      const warningTimestamp = Math.floor(startTime.getTime() / 1000);
+      await channel.send(`<@&${roleId}> Readathon Sprint #${number} is starting <t:${warningTimestamp}:R>! Use \`/join\` to read with us!`);
+
+      const scheduled = scheduledSprints[channelId]?.find(s => s.number === number);
+      const carriedParticipants = scheduled?.participants || [];
+      pendingSprints[channelId] = {
+        type: 'Readathon Sprint',
+        duration: minutes,
+        startsAt: startTime.getTime(),
+        guildId: interaction.guild.id,
+        participants: [...carriedParticipants],
+        sprintNumber: number,
+        pendingTimer: setTimeout(async () => {
+          const pending = pendingSprints[channelId];
+          const carried = pending ? [...pending.participants] : [];
+          delete pendingSprints[channelId];
+          if (scheduledSprints[channelId]) {
+            scheduledSprints[channelId] = scheduledSprints[channelId].filter(s => s.number !== number);
+          }
+          const guild = client.guilds.cache.get(interaction.guild.id);
+          await startSprint(channelId, 'Readathon Sprint', minutes, number, carried, guild);
+          await postSprintStart(channelId);
+        }, 2 * 60 * 1000)
+      };
+    }, msUntilWarning) : null;
+
+    const pendingTimer = msUntilWarning <= 0 ? setTimeout(async () => {
+      const pending = pendingSprints[channelId];
+      const carried = pending ? [...pending.participants] : [];
+      delete pendingSprints[channelId];
+      if (scheduledSprints[channelId]) {
+        scheduledSprints[channelId] = scheduledSprints[channelId].filter(s => s.number !== number);
+      }
+      const guild = client.guilds.cache.get(interaction.guild.id);
+      await startSprint(channelId, 'Readathon Sprint', minutes, number, carried, guild);
+      await postSprintStart(channelId);
+    }, msUntilStart) : null;
+
+    scheduledSprints[channelId].push({
+      number,
+      minutes,
+      startTime: startTime.getTime(),
+      guildId: interaction.guild.id,
+      participants: [],
+      warningTimer,
+      pendingTimer
+    });
+
+    scheduledSprints[channelId].sort((a, b) => a.startTime - b.startTime);
+
+    await interaction.reply(`✅ Readathon Sprint #${number} scheduled for <t:${startTimestamp}:t>! It will post 15 minutes before its start time.`);
+  }
+
+  // ---- /cancel ----
+  if (interaction.commandName === 'cancel') {
+    const sprintNumber = interaction.options.getInteger('number');
+
+    if (sprintNumber) {
+      if (!scheduledSprints[channelId] || !scheduledSprints[channelId].find(s => s.number === sprintNumber)) {
+        await interaction.reply({ content: `Readathon Sprint #${sprintNumber} isn't scheduled in this channel.`, ephemeral: true });
+        return;
+      }
+
+      const scheduled = scheduledSprints[channelId].find(s => s.number === sprintNumber);
+      clearTimeout(scheduled.warningTimer);
+      clearTimeout(scheduled.pendingTimer);
+      scheduledSprints[channelId] = scheduledSprints[channelId].filter(s => s.number !== sprintNumber);
+
+      if (pendingSprints[channelId]?.sprintNumber === sprintNumber) {
+        clearTimeout(pendingSprints[channelId].pendingTimer);
+        delete pendingSprints[channelId];
+      }
+
+      const scheduledTimestamp = Math.floor(scheduled.startTime / 1000);
+      await interaction.reply(`Readathon Sprint #${sprintNumber} (scheduled for <t:${scheduledTimestamp}:t>) has been cancelled.`);
+      return;
+    }
+
+    const sprint = activeSprints[channelId] || pendingSprints[channelId];
+    if (!sprint) {
+      await interaction.reply({ content: `There isn't a sprint running or scheduled in this channel.`, ephemeral: true });
+      return;
+    }
+
+    if (sprint.participants && sprint.participants.length > 0) {
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('confirm_cancel')
+          .setLabel('Yes, cancel it')
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId('deny_cancel')
+          .setLabel('No, keep it going')
+          .setStyle(ButtonStyle.Secondary)
+      );
+
+      await interaction.reply({
+        content: `Are you sure you want to cancel? **${sprint.participants.length}** ${sprint.participants.length === 1 ? 'person has' : 'people have'} joined this sprint.`,
+        components: [row]
+      });
+    } else {
+      clearTimeout(sprint.timer);
+      clearTimeout(sprint.pendingTimer);
+      clearTimeout(sprint.warningTimer);
+      clearTimeout(sprint.finalTimer);
+      clearTimeout(sprint.reminderTimer);
+      delete activeSprints[channelId];
+      delete pendingSprints[channelId];
+
+      const roleId = sprintRoles[sprint.type];
+      await interaction.reply(`The **${sprint.type}** has been cancelled. <@&${roleId}>`);
+    }
+  }
+
+  // ---- /join ----
+  if (interaction.commandName === 'join') {
+    const sprint = activeSprints[channelId] || pendingSprints[channelId];
+    if (!sprint) {
+      await interaction.reply({ content: `There isn't a sprint running in this channel right now. Feel free to start one using the \`/sprint\` command!`, ephemeral: true });
+      return;
+    }
+
+    if (activeSprints[channelId]) {
+      const timeRemaining = (sprint.endTime - Date.now()) / 60000;
+      if (timeRemaining < 5) {
+        await interaction.reply({ content: `Less than 5 minutes are remaining, join us for the next one!`, ephemeral: true });
+        return;
+      }
+    }
+
+    if (sprint.participants.includes(interaction.user.id)) {
+      await interaction.reply({ content: `You have already joined this sprint. Need to leave early? Use the \`/final\` command.`, ephemeral: true });
+      return;
+    }
+
+    sprint.participants.push(interaction.user.id);
+    if (activeSprints[channelId]) {
+      sprint.originalParticipants.add(interaction.user.id);
+    }
+    await interaction.reply(`<@${interaction.user.id}> has joined the **${sprint.type}**!`);
+  }
+
+  // ---- /time ----
+  if (interaction.commandName === 'time') {
+    if (activeSprints[channelId]) {
+      const sprint = activeSprints[channelId];
+      const endTime = Math.floor(sprint.endTime / 1000);
+      await interaction.reply(`The sprint will end <t:${endTime}:R>, at <t:${endTime}:t>.`);
+      return;
+    }
+
+    if (pendingSprints[channelId]) {
+      const sprint = pendingSprints[channelId];
+      const startsAt = Math.floor(sprint.startsAt / 1000);
+      await interaction.reply({ content: `Readathon Sprint #${sprint.sprintNumber} is starting <t:${startsAt}:R>! Use \`/join\` to join!`, ephemeral: true });
+      return;
+    }
+
+    if (scheduledSprints[channelId] && scheduledSprints[channelId].length > 0) {
+      const next = scheduledSprints[channelId][0];
+      const startsAt = Math.floor(next.startTime / 1000);
+      await interaction.reply({ content: `The next scheduled sprint is Readathon Sprint #${next.number}, starting <t:${startsAt}:R>.`, ephemeral: true });
+      return;
+    }
+
+    await interaction.reply({ content: `There isn't a sprint running in this channel. To start one, use the \`/sprint\` command!`, ephemeral: true });
+  }
+
+  // ---- /final ----
+  if (interaction.commandName === 'final') {
+    const minutes = interaction.options.getInteger('minutes');
+
+    if (!activeSprints[channelId]) {
+      await interaction.reply({ content: `There isn't an active sprint in this channel right now.`, flags: 64 });
+      return;
+    }
+
+    const sprint = activeSprints[channelId];
+    const verb = sprintVerbs[sprint.type];
+    const wasParticipant = sprint.originalParticipants.has(interaction.user.id) || sprint.participants.includes(interaction.user.id);
+
+    if (!wasParticipant) {
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`confirm_final_${minutes}_${interaction.user.id}`)
+          .setLabel(`Yes, I ${verb} for ${minutes} minutes`)
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId('deny_final')
+          .setLabel('No, cancel submit')
+          .setStyle(ButtonStyle.Secondary)
+      );
+
+      await interaction.reply({
+        content: `You didn't officially join this sprint, are you sure you want to submit **${minutes} minutes**? Please be honest and only submit the amount of time you actually ${verb}!`,
+        components: [row],
+        flags: 64
+      });
+      return;
+    }
+
+    sprint.finalTimes[interaction.user.id] = minutes;
+    sprint.submittedUsers.add(interaction.user.id);
+    sprint.originalParticipants.add(interaction.user.id);
+    sprint.participants = sprint.participants.filter(id => id !== interaction.user.id);
+
+    await interaction.reply(`<@${interaction.user.id}> has ${verb} for **${minutes} minutes**!`);
+
+    const sprintEnded = Date.now() >= sprint.endTime;
+    const allSubmitted = [...sprint.originalParticipants].every(id => sprint.submittedUsers.has(id));
+    if (sprintEnded && allSubmitted && Object.keys(sprint.finalTimes).length > 0) {
+      await postLeaderboard(channelId, interaction.guild);
+    }
+  }
+
+  // ---- /leave ----
+  if (interaction.commandName === 'leave') {
+    const sprint = activeSprints[channelId] || pendingSprints[channelId];
+    if (!sprint) {
+      await interaction.reply({ content: `There isn't a sprint running in this channel right now.`, ephemeral: true });
+      return;
+    }
+
+    if (!sprint.participants.includes(interaction.user.id)) {
+      await interaction.reply({ content: `You haven't joined this sprint!`, ephemeral: true });
+      return;
+    }
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('confirm_leave')
+        .setLabel(`Yes, I'd like to leave the sprint`)
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId('deny_leave')
+        .setLabel(`No, I will put in my /final count`)
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    await interaction.reply({
+      content: `By using the \`/leave\` command, you will be removed from the leaderboard and any minutes you've read will not count. If you've read for more than five minutes, use the \`/final\` command, and you're all set. Would you like to leave the sprint?`,
+      components: [row],
+      flags: 64
+    });
+  }
 });
 
+// ---- MESSAGE CREATE ----
 client.on('messageCreate', async message => {
+  if (message.author.bot) return;
+
+  // @mention sprint commands
+  if (message.mentions.has(client.user)) {
+    const channelId = message.channelId;
+    const type = channelSprintTypes[channelId];
+    if (type) {
+      const content = message.content.replace(`<@${client.user.id}>`, '').trim().toLowerCase();
+      const args = content.split(/\s+/);
+      const command = args[0];
+
+      if (command === 'sprint') {
+        const inputMinutes = parseInt(args[1]);
+        const startsIn = parseInt(args[2]) || 1;
+
+        if (activeSprints[channelId] || pendingSprints[channelId]) {
+          await message.reply(`There's already a sprint running in this channel that will end <t:${Math.floor((activeSprints[channelId]?.endTime || pendingSprints[channelId]?.startsAt) / 1000)}:R>! If you'd like to join, use the \`/join\` command!`);
+          return;
+        }
+
+        let minutes;
+        if (fixedDurations[type]) {
+          minutes = fixedDurations[type];
+        } else {
+          if (!inputMinutes || inputMinutes < 1 || inputMinutes > 60) {
+            await message.reply(`Please provide a duration between 15 and 60 minutes for a **${type}**!`);
+            return;
+          }
+          minutes = inputMinutes;
+        }
+
+        const startsAt = Date.now() + startsIn * 60 * 1000;
+        const startsAtTimestamp = Math.floor(startsAt / 1000);
+        const announceEmoji = randomEmoji(type);
+
+        await message.reply(`${announceEmoji} **JOIN THE SPRINT** ${announceEmoji}\n\nThe next **${type}** runs for **${minutes} minutes** and will begin <t:${startsAtTimestamp}:R>.\n\nUse \`/join\` to join and \`/final\` if you have to leave early!`);
+
+        pendingSprints[channelId] = {
+          type,
+          duration: minutes,
+          startsAt,
+          guildId: message.guild.id,
+          participants: [],
+          pendingTimer: setTimeout(async () => {
+            const pending = pendingSprints[channelId];
+            const carriedParticipants = pending ? [...pending.participants] : [];
+            delete pendingSprints[channelId];
+            const guild = client.guilds.cache.get(pending.guildId);
+            await startSprint(channelId, type, minutes, null, carriedParticipants, guild);
+            await postSprintStart(channelId);
+          }, startsIn * 60 * 1000)
+        };
+      }
+
+      if (command === 'join') {
+        const sprint = activeSprints[channelId] || pendingSprints[channelId];
+        if (!sprint) {
+          await message.reply(`There isn't a sprint running in this channel right now. Feel free to start one using the \`/sprint\` command!`);
+          return;
+        }
+        if (activeSprints[channelId]) {
+          const timeRemaining = (sprint.endTime - Date.now()) / 60000;
+          if (timeRemaining < 5) {
+            await message.reply(`Less than 5 minutes are remaining, join us for the next one!`);
+            return;
+          }
+        }
+        if (sprint.participants.includes(message.author.id)) {
+          await message.reply(`You have already joined this sprint. Need to leave early? Use the \`/final\` command.`);
+          return;
+        }
+        sprint.participants.push(message.author.id);
+        if (activeSprints[channelId]) {
+          sprint.originalParticipants.add(message.author.id);
+        }
+        await message.reply(`<@${message.author.id}> has joined the **${sprint.type}**!`);
+      }
+
+      if (command === 'final') {
+        const minutes = parseInt(args[1]);
+        if (!minutes || minutes < 1) {
+          await message.reply(`Please provide the number of minutes you participated! Example: \`/final 45\``);
+          return;
+        }
+        if (!activeSprints[channelId]) {
+          await message.reply(`There isn't an active sprint in this channel right now.`);
+          return;
+        }
+        const sprint = activeSprints[channelId];
+        const verb = sprintVerbs[sprint.type];
+        sprint.finalTimes[message.author.id] = minutes;
+        sprint.submittedUsers.add(message.author.id);
+        sprint.originalParticipants.add(message.author.id);
+        sprint.participants = sprint.participants.filter(id => id !== message.author.id);
+        await message.reply(`<@${message.author.id}> has ${verb} for **${minutes} minutes**!`);
+        const sprintEnded = Date.now() >= sprint.endTime;
+        const allSubmitted = [...sprint.originalParticipants].every(id => sprint.submittedUsers.has(id));
+        if (sprintEnded && allSubmitted && Object.keys(sprint.finalTimes).length > 0) {
+          await postLeaderboard(channelId, message.guild);
+        }
+      }
+      return;
+    }
+  }
+
+  // Sticky message handler
   if (message.author.id === client.user.id) return;
-  
   try {
     const existing = await getStickyByChannel(message.channelId);
-    
     if (!existing || !existing.message) return;
-    
     if (existing.message_id) {
       try {
         const oldMessage = await message.channel.messages.fetch(existing.message_id);
         await oldMessage.delete();
       } catch (e) {}
     }
-    
     const sent = await message.channel.send(`${existing.message}`);
     await saveStickyMessage(existing.channel_name, existing.channel_id, existing.message, sent.id);
   } catch (error) {
@@ -462,6 +1490,7 @@ client.on('messageCreate', async message => {
   }
 });
 
+// ---- GUILD MEMBER ADD ----
 client.on('guildMemberAdd', async member => {
   try {
     const { createCanvas, loadImage, registerFont } = require('canvas');
@@ -470,11 +1499,9 @@ client.on('guildMemberAdd', async member => {
     const canvas = createCanvas(800, 300);
     const ctx = canvas.getContext('2d');
 
-    // Draw background
     const background = await loadImage('./welcome-background.png');
     ctx.drawImage(background, 0, 0, 800, 300);
 
-    // Draw circular avatar
     const avatarURL = member.user.displayAvatarURL({ extension: 'png', size: 256 });
     const avatar = await loadImage(avatarURL);
     ctx.save();
@@ -485,55 +1512,47 @@ client.on('guildMemberAdd', async member => {
     ctx.drawImage(avatar, 60, 60, 180, 180);
     ctx.restore();
 
-    // Optional: white ring around avatar
     ctx.beginPath();
     ctx.arc(150, 150, 91, 0, Math.PI * 2);
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 4;
     ctx.stroke();
 
-    // "Welcome!" text
     ctx.fillStyle = '#b16caf';
     ctx.font = 'bold 34px Roboto';
     ctx.fillText('Welcome to The Book Realm!', 280, 120);
 
-   // Username text
     ctx.fillStyle = '#555555';
     let usernameFontSize = 28;
     ctx.font = `${usernameFontSize}px Roboto`;
     while (ctx.measureText(`${member.user.username} just joined the server`).width > 480 && usernameFontSize > 14) {
-    usernameFontSize--;
-    ctx.font = `${usernameFontSize}px Roboto`;
+      usernameFontSize--;
+      ctx.font = `${usernameFontSize}px Roboto`;
     }
     ctx.fillText(`${member.user.username} just joined the server`, 280, 170);
 
-    // Member count
     const memberCount = member.guild.memberCount;
     ctx.font = '22px Roboto';
     ctx.fillStyle = '#888888';
     ctx.fillText(`Member #${memberCount}`, 280, 215);
 
-    // Send to channel
-    const { AttachmentBuilder } = require('discord.js');
     const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'welcome.png' });
     const channel = await client.channels.fetch(process.env.JOINS_LEAVES_CHANNEL_ID);
-    await channel.send({ 
-    content: `Hello <@${member.id}>, welcome to **The Book Realm**!\nAll of the server channels and rules can be found in <#971504387056885861>. <a:book_pages:838547896361811979> We suggest you first take the house quiz, which can be found in the same channel under the *House System* header. Each house competes monthly for the House Cup! Next, you can head over to <#971504539138130010> and let us know a little bit about you, and then <#971501013297135636> to choose which channels and activities you'd like to be notified about or participate in. If you have any questions, please feel free to ping a moderator or DM the ModMail bot (instructions are outlined in the welcome channel). The moderators are pink, purple, and dark blue 💜`,
-      files: [attachment] 
+    await channel.send({
+      content: `Hello <@${member.id}>, welcome to **The Book Realm**!\nAll of the server channels and rules can be found in <#971504387056885861>. <a:book_pages:838547896361811979> We suggest you first take the house quiz, which can be found in the same channel under the *House System* header. Each house competes monthly for the House Cup! Next, you can head over to <#971504539138130010> and let us know a little bit about you, and then <#971501013297135636> to choose which channels and activities you'd like to be notified about or participate in. If you have any questions, please feel free to ping a moderator or DM the ModMail bot (instructions are outlined in the welcome channel). The moderators are pink, purple, and dark blue 💜`,
+      files: [attachment]
     });
-
   } catch (error) {
     console.error('Error sending welcome message:', error);
   }
 });
 
+// ---- GUILD MEMBER REMOVE ----
 client.on('guildMemberRemove', async member => {
   try {
     if (member.partial) await member.fetch();
-    
     const channel = await client.channels.fetch(process.env.JOINS_LEAVES_CHANNEL_ID);
     await channel.send(`**${member.user.username}** just left the realm <a:book_pages:838547896361811979> We will miss you! :(`);
-
     const logChannel = await client.channels.fetch(process.env.KEEPERS_LOG_CHANNEL_ID);
     await logChannel.send(`**${member.user.username}** (ID: \`${member.user.id}\`) just left the server.`);
   } catch (error) {
@@ -541,4 +1560,5 @@ client.on('guildMemberRemove', async member => {
   }
 });
 
+// ---- LOGIN ----
 client.login(process.env.DISCORD_TOKEN);
