@@ -999,6 +999,88 @@ client.on('interactionCreate', async interaction => {
     }
   }
 
+// ---- /mystats ----
+if (interaction.commandName === 'mystats') {
+  try {
+    await interaction.deferReply();
+    
+    // Grab what the user chose for period and date
+    const period = interaction.options.getString('period');
+    const date = interaction.options.getString('date');
+
+    // Get current month and year as defaults
+    const now = new Date();
+    const easternTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const currentMonth = monthNames[easternTime.getMonth()];
+    const currentYear = easternTime.getFullYear();
+
+    // If they provided a date, parse it, otherwise use current month/year
+    let month;
+    if (date) {
+      month = date.split(' ')[0];
+    } else {
+      month = currentMonth;
+    }
+
+    let year;
+    if (date) {
+      year = parseInt(date.split(' ')[1]);
+    } else {
+      year = currentYear;
+    }
+
+    // Query the database based on the chosen period
+    let result;
+    if (period === 'monthly') {
+      result = await pool.query(
+        'SELECT * FROM sprint_results WHERE user_id = $1 AND EXTRACT(MONTH FROM sprint_date) = $2 AND EXTRACT(YEAR FROM sprint_date) = $3',
+        [interaction.user.id, monthNames.indexOf(month) + 1, year]
+      );
+    } else if (period === 'yearly') {
+      result = await pool.query(
+        'SELECT * FROM sprint_results WHERE user_id = $1 AND EXTRACT(YEAR FROM sprint_date) = $2',
+        [interaction.user.id, year]
+      );
+    } else {
+      // Lifetime - no date filter
+      result = await pool.query(
+        'SELECT * FROM sprint_results WHERE user_id = $1',
+        [interaction.user.id]
+      );
+    }
+
+    // Calculate totals from the results
+    const sprintCount = result.rows.length;
+    const totalMinutes = result.rows.reduce((sum, row) => sum + row.minutes, 0);
+
+    // If no results, send ephemeral message
+    if (sprintCount === 0) {
+      await interaction.editReply({ content: `You haven't participated in any sprints this period! Join us in #tall-tomes or #short-stacks to add to your stats!`, flags: 64 });
+      return;
+    }
+
+    // Build the period label for the message
+    let chosenPeriod;
+    if (period === 'monthly') {
+      chosenPeriod = `${month} ${year}`;
+    } else if (period === 'yearly') {
+      chosenPeriod = year;
+    } else {
+      chosenPeriod = null;
+    }
+
+    // Build and send the response
+    const title = period === 'lifetime'
+      ? `<a:book_pages:838547896361811979> **${interaction.user.username}'s lifetime stats**`
+      : `<a:book_pages:838547896361811979> **${interaction.user.username}'s ${period} stats for ${chosenPeriod}**`;
+
+    await interaction.editReply({ content: `${title}\n\nYou've read **${totalMinutes} minutes** across **${sprintCount} sprints**!` });
+
+  } catch (error) {
+    console.error('Error handling mystats command:', error);
+  }
+}
+
   // ---- /stick ----
   if (interaction.commandName === 'stick') {
     try {
