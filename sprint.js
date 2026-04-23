@@ -280,7 +280,7 @@ async function writeSprintToSheets(sprintResults, guild, sprintType, sprintNumbe
       // Also write to reading sprint leaderboard
     }
     
-    if (sprintType !== 'Tall Tomes Sprint' && sprintType !== 'Short Stacks Sprint') {
+   if (sprintType !== 'Tall Tomes Sprint' && sprintType !== 'Short Stacks Sprint' && sprintType !== 'Readathon Sprint') {
       return;
     }
 
