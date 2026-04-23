@@ -447,11 +447,12 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
 const finalDeadline = Math.floor((Date.now() + submitWindow * 60 * 1000) / 1000);
       const mentions = sprint.originalParticipants.size > 0
         ? [...sprint.originalParticipants].map(id => `<@${id}>`).join(', ')
-        : 'everyone';
+        : null;
       const endEmoji = randomEmoji(type);
 
       //Sprint Over message
-      await channel.send(`${endEmoji} **THE SPRINT IS OVER** ${endEmoji}\n\nThis **${sprintLabel}** is over, please put in the amount of time you ${verb}. The leaderboard will post <t:${finalDeadline}:R>, you have until then to put in your final count!\n\n✨ **Participants:**\n${mentions}`);
+      const participantText = mentions ? `\n\n✨ **Participants:**\n${mentions}` : '\n\n✨ **Participants:**';
+await channel.send(`${endEmoji} **THE SPRINT IS OVER** ${endEmoji}\n\nThis **${sprintLabel}** is over, please put in the amount of time you ${verb}. The leaderboard will post <t:${finalDeadline}:R>, you have until then to put in your final count!${participantText}`);
 
       //2 minute reminder before window closes - posts after 3 mins
       sprint.reminderTimer = setTimeout(async () => {
@@ -880,9 +881,15 @@ client.on('interactionCreate', async interaction => {
       clearTimeout(scheduled.warningTimer);
       clearTimeout(scheduled.pendingTimer);
       scheduledSprints[channelId] = scheduledSprints[channelId].filter(s => s.number !== sprintNumber);
-      const scheduledTimestamp = Math.floor(scheduled.startTime / 1000);
-      await interaction.reply(`Readathon Sprint #${sprintNumber} (scheduled for <t:${scheduledTimestamp}:t>) has been cancelled.`);
-      return;
+
+      if (pendingSprints[channelId]?.sprintNumber === sprintNumber) {
+        clearTimeout(pendingSprints[channelId].pendingTimer);
+        delete pendingSprints[channelId];
+}
+
+const scheduledTimestamp = Math.floor(scheduled.startTime / 1000);
+await interaction.reply(`Readathon Sprint #${sprintNumber} (scheduled for <t:${scheduledTimestamp}:t>) has been cancelled.`);
+return;
     }
 
     // Cancelling active or pending sprint
