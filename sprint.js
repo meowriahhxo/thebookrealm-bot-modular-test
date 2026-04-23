@@ -76,12 +76,12 @@ const fixedDurations = {
 //Role IDs per Sprint Type
 // Replace placeholders with real IDs when moving to main server
 const sprintRoles = {
-  'Tall Tomes Sprint': 'TALL_TOMES_ROLE_ID',
-  'Short Stacks Sprint': 'SHORT_STACKS_ROLE_ID',
+  'Tall Tomes Sprint': process.env.TALL_TOMES_ROLE_ID,
+  'Short Stacks Sprint': process.env.SHORT_STACKS_ROLE_ID,
   'Readathon Sprint': process.env.READATHON_ROLE_ID,
-  'Writing Sprint': 'WRITING_ROLE_ID',
-  'Art Sprint': 'ART_ROLE_ID',
-  'Study Sprint': 'STUDY_ROLE_ID'
+  'Writing Sprint': process.env.WRITING_ROLE_ID,
+  'Art Sprint': process.env.ART_ROLE_ID,
+  'Study Sprint': process.env.STUDY_ROLE_ID
 };
 
 //Google API
