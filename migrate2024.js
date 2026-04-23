@@ -15,14 +15,14 @@ async function getAuth() {
 
 async function migrate() {
   try {
-    console.log('Starting 2024 migration...');
+    console.log('Starting 2025 migration...');
 
     const auth = await getAuth();
     const sheets = google.sheets({ version: 'v4', auth });
 
     const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: '19GsQTGOHCoaWkqbuo0r3_2TTYMmM1949VED2gnVQQ0Q',
-      range: '2024 Overall!A:E',
+      spreadsheetId: '15AQESqoJgTGLc9weX3_lgeG5HG3-2N28fVjlgV9wIAs',
+      range: '2025 Overall!A:E',
     });
 
     const rows = response.data.values || [];
@@ -36,19 +36,21 @@ async function migrate() {
       const minutes = parseInt(minutesRaw);
       const sprints = parseInt(sprintsRaw);
 
-      // Skip header row, missing data, or placeholder user IDs
       if (!userId || userId === 'USER ID' || userId === '-' || !minutes || !sprints || isNaN(minutes) || isNaN(sprints)) {
         console.log(`Skipping row — missing or invalid data:`, row);
         continue;
       }
 
-      const avgMinutes = Math.round(minutes / sprints);
+      const baseMinutes = Math.floor(minutes / sprints);
+      const remainder = minutes - (baseMinutes * sprints);
 
       for (let i = 0; i < sprints; i++) {
+        // Last row gets the remainder added to make total exact
+        const rowMinutes = i === sprints - 1 ? baseMinutes + remainder : baseMinutes;
         await pool.query(
           `INSERT INTO sprint_results (user_id, guild_id, sprint_type, minutes, sprint_date)
            VALUES ($1, $2, $3, $4, $5)`,
-          [userId, process.env.GUILD_ID, 'Tall Tomes Sprint', avgMinutes, '2024-12-31']
+          [userId, process.env.GUILD_ID, 'Tall Tomes Sprint', rowMinutes, '2025-12-31']
         );
       }
 
