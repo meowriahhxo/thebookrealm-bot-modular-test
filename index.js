@@ -147,6 +147,14 @@ async function deleteStickyMessage(channelId) {
   await pool.query('DELETE FROM sticky_messages WHERE channel_id = $1', [channelId]);
 }
 
+async function saveSprintResult(userId, guildId, sprintType, minutes) {
+  await pool.query(
+    `INSERT INTO sprint_results (user_id, guild_id, sprint_type, minutes, sprint_date)
+     VALUES ($1, $2, $3, $4, CURRENT_DATE)`,
+    [userId, guildId, sprintType, minutes]
+  );
+}
+
 // ---- GOOGLE AUTH ----
 async function getAuth() {
   const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
@@ -514,6 +522,17 @@ async function postLeaderboard(channelId, guild) {
   clearTimeout(sprint.finalTimer);
   clearTimeout(sprint.reminderTimer);
   await writeSprintToSheets(sprint.finalTimes, guild, sprint.type, sprint.sprintNumber);
+
+// Save reading sprint results to PostgreSQL
+if (sprint.type === 'Tall Tomes Sprint' || sprint.type === 'Short Stacks Sprint' || sprint.type === 'Readathon Sprint') {
+  for (const [userId, minutes] of Object.entries(sprint.finalTimes)) {
+    try {
+      await saveSprintResult(userId, guild.id, sprint.type, minutes);
+    } catch (error) {
+      console.error('Error saving sprint result to database:', error);
+    }
+  }
+}
   delete activeSprints[channelId];
 }
 
