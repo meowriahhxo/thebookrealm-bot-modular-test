@@ -874,9 +874,9 @@ async function registerCommands() {
         .setDescription('The time period to view stats for')
         .setRequired(true)
         .addChoices(
-          { name: 'Monthly', value: 'monthly' },
-          { name: 'Yearly', value: 'yearly' },
-          { name: 'Lifetime', value: 'lifetime' }
+          { name: 'Monthly', value: 'Monthly' },
+          { name: 'Yearly', value: 'Yearly' },
+          { name: 'Lifetime', value: 'Lifetime' }
         ))
     .addStringOption(opt =>
       opt.setName('date')
@@ -1071,8 +1071,8 @@ if (interaction.commandName === 'mystats') {
 
     // Build and send the response
     const title = period === 'lifetime'
-      ? `<a:book_pages:838547896361811979> **${interaction.user.username}'s lifetime stats**`
-      : `<a:book_pages:838547896361811979> **${interaction.user.username}'s ${period} stats for ${chosenPeriod}**`;
+      ? `<a:book_pages:838547896361811979> **${interaction.user.username}'s lifetime Stats**`
+      : `<a:book_pages:838547896361811979> **${interaction.user.username}'s ${period} Stats for ${chosenPeriod}**`;
 
     await interaction.editReply({ content: `${title}\n\nYou've read **${totalMinutes} minutes** across **${sprintCount} sprints**!` });
 
