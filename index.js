@@ -108,6 +108,16 @@ async function initializeDatabase() {
         message_id TEXT
       )
     `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sprint_results (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        guild_id TEXT NOT NULL,
+        sprint_type TEXT NOT NULL,
+        minutes INTEGER NOT NULL,
+        sprint_date DATE NOT NULL
+      )
+    `);
     console.log('Database initialized!');
   } catch (error) {
     console.error('Database initialization error:', error);
