@@ -879,13 +879,9 @@ async function registerCommands() {
           { name: 'Lifetime', value: 'lifetime' }
         ))
     .addStringOption(opt =>
-      opt.setName('month')
-        .setDescription('Retrieve stats for a specific month (i.e., April 2026)')
-        .setRequired(false))
-    .addIntegerOption(opt =>
-      opt.setName('year')
-        .setDescription('Retrieve stats for a specific year (i.e., 2026)')
-        .setRequired(false))
+      opt.setName('date')
+      .setDescription('Retrieve stats for a specific period (i.e., April 2026 or 2026)')
+      .setRequired(false))
     .toJSON(),
   ];
 
