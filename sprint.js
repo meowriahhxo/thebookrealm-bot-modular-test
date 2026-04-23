@@ -1063,5 +1063,122 @@ return;
   }
 });
 
+// ---- MESSAGE COMMANDS (@bot mention) ----
+client.on('messageCreate', async message => {
+  if (message.author.bot) return;
+  if (!message.mentions.has(client.user)) return;
+
+  const channelId = message.channelId;
+  const type = channelSprintTypes[channelId];
+  if (!type) return;
+
+  const content = message.content.replace(`<@${client.user.id}>`, '').trim().toLowerCase();
+  const args = content.split(/\s+/);
+  const command = args[0];
+
+  // @bot sprint 60 5
+  if (command === 'sprint') {
+    const inputMinutes = parseInt(args[1]);
+    const startsIn = parseInt(args[2]) || 1;
+
+    if (activeSprints[channelId] || pendingSprints[channelId]) {
+      await message.reply(`There's already a sprint running in this channel that will end <t:${Math.floor((activeSprints[channelId]?.endTime || pendingSprints[channelId]?.startsAt) / 1000)}:R>! If you'd like to join, use the \`/join\` command!`);
+      return;
+    }
+
+    let minutes;
+    if (fixedDurations[type]) {
+      minutes = fixedDurations[type];
+    } else {
+      if (!inputMinutes || inputMinutes < 1 || inputMinutes > 60) {
+        await message.reply(`Please provide a duration between 15 and 60 minutes for a **${type}**!`);
+        return;
+      }
+      minutes = inputMinutes;
+    }
+
+    const startsAt = Date.now() + startsIn * 60 * 1000;
+    const startsAtTimestamp = Math.floor(startsAt / 1000);
+    const announceEmoji = randomEmoji(type);
+
+    await message.reply(`${announceEmoji} **JOIN THE SPRINT** ${announceEmoji}\n\nThe next **${type}** runs for **${minutes} minutes** and will begin <t:${startsAtTimestamp}:R>.\n\nUse \`/join\` to join and \`/final\` if you have to leave early!`);
+
+    pendingSprints[channelId] = {
+      type,
+      duration: minutes,
+      startsAt,
+      guildId: message.guild.id,
+      participants: [],
+      pendingTimer: setTimeout(async () => {
+        const pending = pendingSprints[channelId];
+        const carriedParticipants = pending ? [...pending.participants] : [];
+        delete pendingSprints[channelId];
+        const guild = client.guilds.cache.get(pending.guildId);
+        await startSprint(channelId, type, minutes, null, carriedParticipants, guild);
+        await postSprintStart(channelId);
+      }, startsIn * 60 * 1000)
+    };
+  }
+
+  // @bot join
+  if (command === 'join') {
+    const sprint = activeSprints[channelId] || pendingSprints[channelId];
+    if (!sprint) {
+      await message.reply(`There isn't a sprint running in this channel right now. Feel free to start one using the \`/sprint\` command!`);
+      return;
+    }
+
+    if (activeSprints[channelId]) {
+      const timeRemaining = (sprint.endTime - Date.now()) / 60000;
+      if (timeRemaining < 5) {
+        await message.reply(`Less than 5 minutes are remaining, join us for the next one!`);
+        return;
+      }
+    }
+
+    if (sprint.participants.includes(message.author.id)) {
+      await message.reply(`You have already joined this sprint. Need to leave early? Use the \`/final\` command.`);
+      return;
+    }
+
+    sprint.participants.push(message.author.id);
+    if (activeSprints[channelId]) {
+      sprint.originalParticipants.add(message.author.id);
+    }
+    await message.reply(`<@${message.author.id}> has joined the **${sprint.type}**!`);
+  }
+
+  // @bot final 45
+  if (command === 'final') {
+    const minutes = parseInt(args[1]);
+
+    if (!minutes || minutes < 1) {
+      await message.reply(`Please provide the number of minutes you participated! Example: \`/final 45\``);
+      return;
+    }
+
+    if (!activeSprints[channelId]) {
+      await message.reply(`There isn't an active sprint in this channel right now.`);
+      return;
+    }
+
+    const sprint = activeSprints[channelId];
+    const verb = sprintVerbs[sprint.type];
+
+    sprint.finalTimes[message.author.id] = minutes;
+    sprint.submittedUsers.add(message.author.id);
+    sprint.originalParticipants.add(message.author.id);
+    sprint.participants = sprint.participants.filter(id => id !== message.author.id);
+
+    await message.reply(`<@${message.author.id}> has ${verb} for **${minutes} minutes**!`);
+
+    const sprintEnded = Date.now() >= sprint.endTime;
+    const allSubmitted = [...sprint.originalParticipants].every(id => sprint.submittedUsers.has(id));
+    if (sprintEnded && allSubmitted && Object.keys(sprint.finalTimes).length > 0) {
+      await postLeaderboard(channelId, message.guild);
+    }
+  }
+});
+
 // LOGIN
 client.login(process.env.DISCORD_TOKEN);
