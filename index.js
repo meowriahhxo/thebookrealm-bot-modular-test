@@ -1023,11 +1023,12 @@ if (interaction.commandName === 'mystats') {
     }
 
     let year;
-    if (date) {
-      year = parseInt(date.split(' ')[1]);
-    } else {
-      year = currentYear;
-    }
+if (date) {
+  const parts = date.split(' ');
+  year = parseInt(parts.length === 1 ? parts[0] : parts[1]);
+} else {
+  year = currentYear;
+}
 
     // Query the database based on the chosen period
     let result;
@@ -1055,7 +1056,7 @@ if (interaction.commandName === 'mystats') {
 
     // If no results, send ephemeral message
     if (sprintCount === 0) {
-      await interaction.editReply({ content: `You haven't participated in any sprints this period! Join us in <#TALL_TOMES_CHANNEL_ID> or <#SHORT_STACKS_CHANNEL_ID> to add to your stats!`, flags: 64 });
+      await interaction.editReply({ content: `You haven't participated in any sprints this period! Join us in <#${process.env.TALL_TOMES_CHANNEL_ID}> or <#${process.env.SHORT_STACKS_CHANNEL_ID}> to add to your stats!`, flags: 64 });
       return;
     }
 
