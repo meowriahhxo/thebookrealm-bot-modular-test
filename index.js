@@ -618,7 +618,9 @@ async function writeReadathonToSheets(sprintResults, guild, sprintNumber) {
       if (!house) continue;
 
       const displayName = member.displayName;
-      const existingRowIndex = rows.findIndex(row => row[2] === userId);
+
+      // Discord ID is now in column A (index 0)
+      const existingRowIndex = rows.findIndex(row => row[0] === userId);
 
       if (existingRowIndex !== -1) {
         const rowNumber = existingRowIndex + 1;
@@ -629,11 +631,12 @@ async function writeReadathonToSheets(sprintResults, guild, sprintNumber) {
           requestBody: { values: [[minutes]] }
         });
       } else {
+        // New row: Discord ID, House, Display Name
         await sheets.spreadsheets.values.append({
           spreadsheetId: process.env.READATHON_LEADERBOARD_ID,
           range: `${tabName}!A:C`,
           valueInputOption: 'RAW',
-          requestBody: { values: [[house, displayName, userId]] }
+          requestBody: { values: [[userId, house, displayName]] }
         });
 
         const newResponse = await sheets.spreadsheets.values.get({
@@ -641,7 +644,7 @@ async function writeReadathonToSheets(sprintResults, guild, sprintNumber) {
           range: `${tabName}!A:C`,
         });
         const newRows = newResponse.data.values || [];
-        const newRowIndex = newRows.findIndex(row => row[2] === userId);
+        const newRowIndex = newRows.findIndex(row => row[0] === userId);
         if (newRowIndex !== -1) {
           await sheets.spreadsheets.values.update({
             spreadsheetId: process.env.READATHON_LEADERBOARD_ID,
@@ -713,25 +716,28 @@ async function writeSprintToSheets(sprintResults, guild, sprintType, sprintNumbe
       if (!house) continue;
 
       const displayName = member.displayName;
-      const existingRowIndex = rows.findIndex(row => row[4] === userId);
+
+      // Discord ID is now in column A (index 0)
+      const existingRowIndex = rows.findIndex(row => row[0] === userId);
 
       if (existingRowIndex !== -1) {
-        const currentMinutes = parseFloat(rows[existingRowIndex][2]) || 0;
-        const currentSprints = parseInt(rows[existingRowIndex][3]) || 0;
+        const currentMinutes = parseFloat(rows[existingRowIndex][3]) || 0;
+        const currentSprints = parseInt(rows[existingRowIndex][4]) || 0;
         const rowNumber = existingRowIndex + 1;
 
         await sheets.spreadsheets.values.update({
           spreadsheetId: process.env.SPRINT_LEADERBOARD_ID,
-          range: `${tabName}!C${rowNumber}:D${rowNumber}`,
+          range: `${tabName}!D${rowNumber}:E${rowNumber}`,
           valueInputOption: 'RAW',
           requestBody: { values: [[currentMinutes + minutes, currentSprints + 1]] }
         });
       } else {
+        // New row: Discord ID, House, Display Name, Minutes, Sprint Count
         await sheets.spreadsheets.values.append({
           spreadsheetId: process.env.SPRINT_LEADERBOARD_ID,
           range: `${tabName}!A:E`,
           valueInputOption: 'RAW',
-          requestBody: { values: [[house, displayName, minutes, 1, userId]] }
+          requestBody: { values: [[userId, house, displayName, minutes, 1]] }
         });
       }
     }
