@@ -1071,8 +1071,8 @@ if (interaction.commandName === 'mystats') {
 
     // Build and send the response
     const title = period === 'lifetime'
-      ? `<a:book_pages:838547896361811979> **${interaction.user.username}'s lifetime Stats**`
-      : `<a:book_pages:838547896361811979> **${interaction.user.username}'s ${period} Stats for ${chosenPeriod}**`;
+      ? `<a:book_pages:838547896361811979> **${interaction.user.username}'s Lifetime Stats**`
+      : `<a:book_pages:838547896361811979> **${interaction.user.username}'s ${period.charAt(0).toUpperCase() + period.slice(1)} Stats for ${chosenPeriod}**`;
 
     await interaction.editReply({ content: `${title}\n\nYou've read **${totalMinutes.toLocaleString()} minutes** across **${sprintCount} sprints**!` });
 
