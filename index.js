@@ -866,6 +866,27 @@ async function registerCommands() {
       .setName('leave')
       .setDescription('Leave the sprint without submitting a time')
       .toJSON(),
+    new SlashCommandBuilder()
+    .setName('mystats')
+    .setDescription('View your sprint stats')
+    .addStringOption(opt =>
+      opt.setName('period')
+        .setDescription('The time period to view stats for')
+        .setRequired(true)
+        .addChoices(
+          { name: 'Monthly', value: 'monthly' },
+          { name: 'Yearly', value: 'yearly' },
+          { name: 'Lifetime', value: 'lifetime' }
+        ))
+    .addStringOption(opt =>
+      opt.setName('month')
+        .setDescription('Retrieve stats for a specific month (i.e., April 2026)')
+        .setRequired(false))
+    .addIntegerOption(opt =>
+      opt.setName('year')
+        .setDescription('Retrieve stats for a specific year (i.e., 2026)')
+        .setRequired(false))
+    .toJSON(),
   ];
 
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
