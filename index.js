@@ -874,9 +874,9 @@ async function registerCommands() {
         .setDescription('The time period to view stats for')
         .setRequired(true)
         .addChoices(
-          { name: 'Monthly', value: 'Monthly' },
-          { name: 'Yearly', value: 'Yearly' },
-          { name: 'Lifetime', value: 'Lifetime' }
+          { name: 'Monthly', value: 'monthly' },
+          { name: 'Yearly', value: 'yearly' },
+          { name: 'Lifetime', value: 'lifetime' }
         ))
     .addStringOption(opt =>
       opt.setName('date')
@@ -1055,7 +1055,7 @@ if (interaction.commandName === 'mystats') {
 
     // If no results, send ephemeral message
     if (sprintCount === 0) {
-      await interaction.editReply({ content: `You haven't participated in any sprints this period! Join us in #tall-tomes or #short-stacks to add to your stats!`, flags: 64 });
+      await interaction.editReply({ content: `You haven't participated in any sprints this period! Join us in <#TALL_TOMES_CHANNEL_ID> or <#SHORT_STACKS_CHANNEL_ID> to add to your stats!`, flags: 64 });
       return;
     }
 
@@ -1074,7 +1074,7 @@ if (interaction.commandName === 'mystats') {
       ? `<a:book_pages:838547896361811979> **${interaction.user.username}'s lifetime Stats**`
       : `<a:book_pages:838547896361811979> **${interaction.user.username}'s ${period} Stats for ${chosenPeriod}**`;
 
-    await interaction.editReply({ content: `${title}\n\nYou've read **${totalMinutes} minutes** across **${sprintCount} sprints**!` });
+    await interaction.editReply({ content: `${title}\n\nYou've read **${totalMinutes.toLocaleString()} minutes** across **${sprintCount} sprints**!` });
 
   } catch (error) {
     console.error('Error handling mystats command:', error);
