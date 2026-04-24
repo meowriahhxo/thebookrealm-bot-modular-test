@@ -562,6 +562,7 @@ async function writeCreativeSprints(sprintResults, guild, sprintType) {
       try {
         member = await guild.members.fetch(userId);
       } catch (e) {
+        console.log(`Could not fetch member ${userId} for ${sprintType}`);
         continue;
       }
 
@@ -573,7 +574,10 @@ async function writeCreativeSprints(sprintResults, guild, sprintType) {
         }
       }
 
-      if (!house) continue;
+      if (!house) {
+        console.log(`No house found for ${userId} in ${sprintType}`);
+        continue;
+      }
       houseTotals[house] += minutes;
     }
 
@@ -596,9 +600,10 @@ async function writeCreativeSprints(sprintResults, guild, sprintType) {
         valueInputOption: 'RAW',
         requestBody: { values: [[current + minutes]] }
       });
+      console.log(`Updated ${house} in ${tabName} for ${sprintType} (+${minutes} minutes)`);
     }
 
-    console.log(`${sprintType} results written to Points spreadsheet!`);
+    console.log(`${sprintType} results fully written to Points spreadsheet!`);
   } catch (error) {
     console.error(`Error writing ${sprintType} to Points spreadsheet:`, error);
   }
@@ -633,6 +638,7 @@ async function writeReadathonToSheets(sprintResults, guild, sprintNumber) {
       try {
         member = await guild.members.fetch(userId);
       } catch (e) {
+        console.log(`Could not fetch member ${userId} for Readathon Sprint #${sprintNumber}`);
         continue;
       }
 
@@ -644,11 +650,12 @@ async function writeReadathonToSheets(sprintResults, guild, sprintNumber) {
         }
       }
 
-      if (!house) continue;
+      if (!house) {
+        console.log(`No house found for ${userId} in Readathon Sprint #${sprintNumber}`);
+        continue;
+      }
 
       const displayName = member.displayName;
-
-      // Discord ID is now in column A (index 0)
       const existingRowIndex = rows.findIndex(row => row[0] === userId);
 
       if (existingRowIndex !== -1) {
@@ -659,8 +666,8 @@ async function writeReadathonToSheets(sprintResults, guild, sprintNumber) {
           valueInputOption: 'RAW',
           requestBody: { values: [[minutes]] }
         });
+        console.log(`Updated ${displayName} (${userId}) in Readathon Sprint #${sprintNumber} — ${minutes} minutes`);
       } else {
-        // New row: Discord ID, House, Display Name
         await sheets.spreadsheets.values.append({
           spreadsheetId: process.env.READATHON_LEADERBOARD_ID,
           range: `${tabName}!A:C`,
@@ -682,9 +689,10 @@ async function writeReadathonToSheets(sprintResults, guild, sprintNumber) {
             requestBody: { values: [[minutes]] }
           });
         }
+        console.log(`Added ${displayName} (${userId}) to Readathon Sprint #${sprintNumber} — ${minutes} minutes`);
       }
     }
-    console.log(`Readathon Sprint #${sprintNumber} results written to Readathon Leaderboard!`);
+    console.log(`Readathon Sprint #${sprintNumber} results fully written to Readathon Leaderboard!`);
   } catch (error) {
     console.error('Error writing to Readathon Leaderboard:', error);
   }
@@ -712,65 +720,71 @@ async function writeSprintToSheets(sprintResults, guild, sprintType, sprintNumbe
     const easternTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
     const tabName = `${monthNames[easternTime.getMonth()]} ${easternTime.getFullYear()}`;
 
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: process.env.SPRINT_LEADERBOARD_ID,
-      range: `${tabName}!A:E`,
-    });
+    for (const targetTab of [tabName, '2026 Overall']) {
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId: process.env.SPRINT_LEADERBOARD_ID,
+        range: `${targetTab}!A:E`,
+      });
 
-    const rows = response.data.values || [];
+      const rows = response.data.values || [];
 
-    for (const [userId, minutes] of Object.entries(sprintResults)) {
-      let member;
-      try {
-        member = await guild.members.fetch(userId);
-      } catch (e) {
-        continue;
-      }
+      for (const [userId, minutes] of Object.entries(sprintResults)) {
+        let member;
+        try {
+          member = await guild.members.fetch(userId);
+        } catch (e) {
+          console.log(`Could not fetch member ${userId} for ${sprintType} in ${targetTab}`);
+          continue;
+        }
 
-      const houseRoles = {
-        [process.env.ASPHODEL_ROLE_ID]: 'Asphodel',
-        [process.env.DREANNI_ROLE_ID]: 'Dreanni',
-        [process.env.LAIIDON_ROLE_ID]: 'Laiidon',
-        [process.env.ZELDARIAN_ROLE_ID]: 'Zeldarian'
-      };
+        const houseRoles = {
+          [process.env.ASPHODEL_ROLE_ID]: 'Asphodel',
+          [process.env.DREANNI_ROLE_ID]: 'Dreanni',
+          [process.env.LAIIDON_ROLE_ID]: 'Laiidon',
+          [process.env.ZELDARIAN_ROLE_ID]: 'Zeldarian'
+        };
 
-      let house = null;
-      for (const [roleId, houseName] of Object.entries(houseRoles)) {
-        if (member.roles.cache.has(roleId)) {
-          house = houseName;
-          break;
+        let house = null;
+        for (const [roleId, houseName] of Object.entries(houseRoles)) {
+          if (member.roles.cache.has(roleId)) {
+            house = houseName;
+            break;
+          }
+        }
+
+        if (!house) {
+          console.log(`No house found for ${userId} in ${sprintType} — ${targetTab}`);
+          continue;
+        }
+
+        const displayName = member.displayName;
+        const existingRowIndex = rows.findIndex(row => row[0] === userId);
+
+        if (existingRowIndex !== -1) {
+          const currentMinutes = parseFloat(rows[existingRowIndex][3]) || 0;
+          const currentSprints = parseInt(rows[existingRowIndex][4]) || 0;
+          const rowNumber = existingRowIndex + 1;
+
+          await sheets.spreadsheets.values.update({
+            spreadsheetId: process.env.SPRINT_LEADERBOARD_ID,
+            range: `${targetTab}!D${rowNumber}:E${rowNumber}`,
+            valueInputOption: 'RAW',
+            requestBody: { values: [[currentMinutes + minutes, currentSprints + 1]] }
+          });
+          console.log(`Updated ${displayName} (${userId}) in ${targetTab} — +${minutes} minutes`);
+        } else {
+          await sheets.spreadsheets.values.append({
+            spreadsheetId: process.env.SPRINT_LEADERBOARD_ID,
+            range: `${targetTab}!A:E`,
+            valueInputOption: 'RAW',
+            requestBody: { values: [[userId, house, displayName, minutes, 1]] }
+          });
+          console.log(`Added ${displayName} (${userId}) to ${targetTab} — ${minutes} minutes`);
         }
       }
-
-      if (!house) continue;
-
-      const displayName = member.displayName;
-
-      // Discord ID is now in column A (index 0)
-      const existingRowIndex = rows.findIndex(row => row[0] === userId);
-
-      if (existingRowIndex !== -1) {
-        const currentMinutes = parseFloat(rows[existingRowIndex][3]) || 0;
-        const currentSprints = parseInt(rows[existingRowIndex][4]) || 0;
-        const rowNumber = existingRowIndex + 1;
-
-        await sheets.spreadsheets.values.update({
-          spreadsheetId: process.env.SPRINT_LEADERBOARD_ID,
-          range: `${tabName}!D${rowNumber}:E${rowNumber}`,
-          valueInputOption: 'RAW',
-          requestBody: { values: [[currentMinutes + minutes, currentSprints + 1]] }
-        });
-      } else {
-        // New row: Discord ID, House, Display Name, Minutes, Sprint Count
-        await sheets.spreadsheets.values.append({
-          spreadsheetId: process.env.SPRINT_LEADERBOARD_ID,
-          range: `${tabName}!A:E`,
-          valueInputOption: 'RAW',
-          requestBody: { values: [[userId, house, displayName, minutes, 1]] }
-        });
-      }
     }
-    console.log('Sprint results written to Google Sheets!');
+
+    console.log(`Sprint results written to ${tabName} and 2026 Overall!`);
   } catch (error) {
     console.error('Error writing to Google Sheets:', error);
   }
