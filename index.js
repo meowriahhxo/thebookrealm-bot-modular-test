@@ -193,6 +193,76 @@ async function saveSprintResult(userId, guildId, sprintType, minutes) {
   );
 }
 
+// ---- SPRINT STATE PERSISTENCE ----
+async function saveActiveSprint(channelId, sprint) {
+  await pool.query(`
+    INSERT INTO active_sprints (channel_id, guild_id, type, duration, start_time, end_time, sprint_number, participants, original_participants, final_times, submitted_users)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    ON CONFLICT (channel_id) DO UPDATE SET
+      guild_id = $2, type = $3, duration = $4, start_time = $5, end_time = $6,
+      sprint_number = $7, participants = $8, original_participants = $9,
+      final_times = $10, submitted_users = $11
+  `, [
+    channelId,
+    sprint.guildId,
+    sprint.type,
+    sprint.duration,
+    sprint.startTime,
+    sprint.endTime,
+    sprint.sprintNumber || null,
+    [...(sprint.participants || [])],
+    [...(sprint.originalParticipants || [])],
+    JSON.stringify(sprint.finalTimes || {}),
+    [...(sprint.submittedUsers || [])]
+  ]);
+}
+
+async function savePendingSprint(channelId, sprint) {
+  await pool.query(`
+    INSERT INTO pending_sprints (channel_id, guild_id, type, duration, starts_at, sprint_number, participants)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    ON CONFLICT (channel_id) DO UPDATE SET
+      guild_id = $2, type = $3, duration = $4, starts_at = $5,
+      sprint_number = $6, participants = $7
+  `, [
+    channelId,
+    sprint.guildId,
+    sprint.type,
+    sprint.duration,
+    sprint.startsAt,
+    sprint.sprintNumber || null,
+    [...(sprint.participants || [])]
+  ]);
+}
+
+async function saveScheduledSprint(channelId, sprint) {
+  await pool.query(`
+    INSERT INTO scheduled_sprints (channel_id, guild_id, sprint_number, duration, start_time, participants)
+    VALUES ($1, $2, $3, $4, $5, $6)
+    ON CONFLICT (channel_id, sprint_number) DO UPDATE SET
+      guild_id = $2, duration = $4, start_time = $5, participants = $6
+  `, [
+    channelId,
+    sprint.guildId,
+    sprint.number,
+    sprint.minutes,
+    sprint.startTime,
+    [...(sprint.participants || [])]
+  ]);
+}
+
+async function deleteActiveSprint(channelId) {
+  await pool.query('DELETE FROM active_sprints WHERE channel_id = $1', [channelId]);
+}
+
+async function deletePendingSprint(channelId) {
+  await pool.query('DELETE FROM pending_sprints WHERE channel_id = $1', [channelId]);
+}
+
+async function deleteScheduledSprint(channelId, sprintNumber) {
+  await pool.query('DELETE FROM scheduled_sprints WHERE channel_id = $1 AND sprint_number = $2', [channelId, sprintNumber]);
+}
+
 // ---- GOOGLE AUTH ----
 async function getAuth() {
   const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
