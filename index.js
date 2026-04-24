@@ -1616,12 +1616,12 @@ if (interaction.commandName === 'export') {
   if (interaction.commandName === 'sprint') {
     const type = channelSprintTypes[channelId];
     if (!type) {
-      await interaction.reply({ content: 'This channel isn\'t set up for sprints!', ephemeral: true });
+      await interaction.reply({ content: 'This channel isn\'t set up for sprints!', flags: 64 });
       return;
     }
 
     if (activeSprints[channelId] || pendingSprints[channelId]) {
-      await interaction.reply({ content: `There's already a sprint running in this channel that will end <t:${Math.floor((activeSprints[channelId]?.endTime || pendingSprints[channelId]?.startsAt) / 1000)}:R>! If you'd like to join, use the \`/join\` command!`, ephemeral: true });
+      await interaction.reply({ content: `There's already a sprint running in this channel that will end <t:${Math.floor((activeSprints[channelId]?.endTime || pendingSprints[channelId]?.startsAt) / 1000)}:R>! If you'd like to join, use the \`/join\` command!`, flags: 64 });
       return;
     }
 
@@ -1634,7 +1634,7 @@ if (interaction.commandName === 'export') {
       minutes = fixedDurations[type];
     } else {
       if (!inputMinutes || inputMinutes < 1 || inputMinutes > 60) {
-        await interaction.reply({ content: `Please provide a duration between 15 and 60 minutes for a **${type}**!`, ephemeral: true });
+        await interaction.reply({ content: `Please provide a duration between 15 and 60 minutes for a **${type}**!`, flags: 64 });
         return;
       }
       minutes = inputMinutes;
@@ -1668,7 +1668,7 @@ if (interaction.commandName === 'export') {
   if (interaction.commandName === 'schedule') {
     const type = channelSprintTypes[channelId];
     if (!type) {
-      await interaction.reply({ content: 'This channel isn\'t set up for sprints!', ephemeral: true });
+      await interaction.reply({ content: 'This channel isn\'t set up for sprints!', flags: 64 });
       return;
     }
 
@@ -1681,7 +1681,7 @@ if (interaction.commandName === 'export') {
 
     const startTime = parseTimeToUTC(timeStr, dateStr);
     if (!startTime) {
-      await interaction.reply({ content: 'Invalid time or date format! Use time like `3:00PM` or `15:00`, and date like `02/05/2026`.', ephemeral: true });
+      await interaction.reply({ content: 'Invalid time or date format! Use time like `3:00PM` or `15:00`, and date like `02/05/2026`.', flags: 64 });
       return;
     }
 
@@ -1690,14 +1690,14 @@ if (interaction.commandName === 'export') {
     const startTimestamp = Math.floor(startTime.getTime() / 1000);
 
     if (msUntilStart <= 0) {
-      await interaction.reply({ content: 'That time has already passed!', ephemeral: true });
+      await interaction.reply({ content: 'That time has already passed!', flags: 64 });
       return;
     }
 
     if (!scheduledSprints[channelId]) scheduledSprints[channelId] = [];
 
     if (scheduledSprints[channelId].find(s => s.number === number)) {
-      await interaction.reply({ content: `Readathon Sprint #${number} is already scheduled!`, ephemeral: true });
+      await interaction.reply({ content: `Readathon Sprint #${number} is already scheduled!`, flags: 64 });
       return;
     }
 
@@ -1776,7 +1776,7 @@ if (interaction.commandName === 'export') {
 
     if (sprintNumber) {
       if (!scheduledSprints[channelId] || !scheduledSprints[channelId].find(s => s.number === sprintNumber)) {
-        await interaction.reply({ content: `Readathon Sprint #${sprintNumber} isn't scheduled in this channel.`, ephemeral: true });
+        await interaction.reply({ content: `Readathon Sprint #${sprintNumber} isn't scheduled in this channel.`, flags: 64 });
         return;
       }
 
@@ -1798,7 +1798,7 @@ if (interaction.commandName === 'export') {
 
     const sprint = activeSprints[channelId] || pendingSprints[channelId];
     if (!sprint) {
-      await interaction.reply({ content: `There isn't a sprint running or scheduled in this channel.`, ephemeral: true });
+      await interaction.reply({ content: `There isn't a sprint running or scheduled in this channel.`, flags: 64 });
       return;
     }
 
@@ -1838,20 +1838,20 @@ if (interaction.commandName === 'export') {
   if (interaction.commandName === 'join') {
     const sprint = activeSprints[channelId] || pendingSprints[channelId];
     if (!sprint) {
-      await interaction.reply({ content: `There isn't a sprint running in this channel right now. Feel free to start one using the \`/sprint\` command!`, ephemeral: true });
+      await interaction.reply({ content: `There isn't a sprint running in this channel right now. Feel free to start one using the \`/sprint\` command!`, flags: 64 });
       return;
     }
 
     if (activeSprints[channelId]) {
       const timeRemaining = (sprint.endTime - Date.now()) / 60000;
       if (timeRemaining < 5) {
-        await interaction.reply({ content: `Less than 5 minutes are remaining, join us for the next one!`, ephemeral: true });
+        await interaction.reply({ content: `Less than 5 minutes are remaining, join us for the next one!`, flags: 64 });
         return;
       }
     }
 
     if (sprint.participants.includes(interaction.user.id)) {
-      await interaction.reply({ content: `You have already joined this sprint. Need to leave early? Use the \`/final\` command.`, ephemeral: true });
+      await interaction.reply({ content: `You have already joined this sprint. Need to leave early? Use the \`/final\` command.`, flags: 64 });
       return;
     }
 
@@ -1877,18 +1877,18 @@ if (interaction.commandName === 'export') {
     if (pendingSprints[channelId]) {
       const sprint = pendingSprints[channelId];
       const startsAt = Math.floor(sprint.startsAt / 1000);
-      await interaction.reply({ content: `Readathon Sprint #${sprint.sprintNumber} is starting <t:${startsAt}:R>! Use \`/join\` to join!`, ephemeral: true });
+      await interaction.reply({ content: `Readathon Sprint #${sprint.sprintNumber} is starting <t:${startsAt}:R>! Use \`/join\` to join!`, flags: 64 });
       return;
     }
 
     if (scheduledSprints[channelId] && scheduledSprints[channelId].length > 0) {
       const next = scheduledSprints[channelId][0];
       const startsAt = Math.floor(next.startTime / 1000);
-      await interaction.reply({ content: `The next scheduled sprint is Readathon Sprint #${next.number}, starting <t:${startsAt}:R>.`, ephemeral: true });
+      await interaction.reply({ content: `The next scheduled sprint is Readathon Sprint #${next.number}, starting <t:${startsAt}:R>.`, flags: 64 });
       return;
     }
 
-    await interaction.reply({ content: `There isn't a sprint running in this channel. To start one, use the \`/sprint\` command!`, ephemeral: true });
+    await interaction.reply({ content: `There isn't a sprint running in this channel. To start one, use the \`/sprint\` command!`, flags: 64 });
   }
 
   // ---- /final ----
@@ -1943,12 +1943,12 @@ if (interaction.commandName === 'export') {
   if (interaction.commandName === 'leave') {
     const sprint = activeSprints[channelId] || pendingSprints[channelId];
     if (!sprint) {
-      await interaction.reply({ content: `There isn't a sprint running in this channel right now.`, ephemeral: true });
+      await interaction.reply({ content: `There isn't a sprint running in this channel right now.`, flags: 64 });
       return;
     }
 
     if (!sprint.participants.includes(interaction.user.id)) {
-      await interaction.reply({ content: `You haven't joined this sprint!`, ephemeral: true });
+      await interaction.reply({ content: `You haven't joined this sprint!`, flags: 64 });
       return;
     }
 
