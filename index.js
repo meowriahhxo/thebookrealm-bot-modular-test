@@ -1105,6 +1105,7 @@ client.on('interactionCreate', async interaction => {
       sprint.submittedUsers.add(userId);
       sprint.originalParticipants.add(userId);
       sprint.participants = sprint.participants.filter(id => id !== userId);
+      await saveActiveSprint(channelId, { ...sprint, guildId: interaction.guild.id });
 
       await interaction.update({ content: `Got it! Your **${minutes} minutes** have been logged.`, components: [] });
       const sprintVerb = activeSprints[channelId] ? sprintVerbs[activeSprints[channelId].type] : 'read';
@@ -1130,6 +1131,11 @@ client.on('interactionCreate', async interaction => {
       const userId = interaction.user.id;
       sprint.participants = sprint.participants.filter(id => id !== userId);
       sprint.originalParticipants.delete(userId);
+      if (activeSprints[channelId]) {
+        await saveActiveSprint(channelId, { ...activeSprints[channelId], guildId: interaction.guild.id });
+      } else if (pendingSprints[channelId]) {
+        await deletePendingSprint(channelId);
+      }
       await interaction.update({ content: `You've been removed from the sprint. See you next time!`, components: [] });
       await interaction.channel.send(`<@${userId}> has left the **${sprint.type}**.`);
     }
