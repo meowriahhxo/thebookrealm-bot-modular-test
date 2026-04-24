@@ -914,6 +914,177 @@ async function writeSprintToSheets(sprintResults, guild, sprintType, sprintNumbe
   }
 }
 
+// ---- RESTORE SPRINT STATE ----
+async function restoreSprintState() {
+  try {
+    const guild = client.guilds.cache.first();
+
+    // Restore scheduled sprints
+    const scheduledResult = await pool.query('SELECT * FROM scheduled_sprints');
+    for (const row of scheduledResult.rows) {
+      const msUntilStart = row.start_time - Date.now();
+      const msUntilWarning = msUntilStart - 15 * 60 * 1000;
+
+      if (msUntilStart <= 0) {
+        // Already passed, clean up
+        await deleteScheduledSprint(row.channel_id, row.sprint_number);
+        continue;
+      }
+
+      if (!scheduledSprints[row.channel_id]) scheduledSprints[row.channel_id] = [];
+
+      const warningTimer = msUntilWarning > 0 ? setTimeout(async () => {
+        const channel = await client.channels.fetch(row.channel_id);
+        const warningTimestamp = Math.floor(row.start_time / 1000);
+        await channel.send(`<@&${process.env.READATHON_ROLE_ID}> Readathon Sprint #${row.sprint_number} is starting <t:${warningTimestamp}:R>! Use \`/join\` to read with us!`);
+
+        const scheduled = scheduledSprints[row.channel_id]?.find(s => s.number === row.sprint_number);
+        const carriedParticipants = scheduled?.participants || [];
+        pendingSprints[row.channel_id] = {
+          type: 'Readathon Sprint',
+          duration: row.duration,
+          startsAt: row.start_time,
+          guildId: row.guild_id,
+          participants: [...carriedParticipants],
+          sprintNumber: row.sprint_number,
+          pendingTimer: setTimeout(async () => {
+            const pending = pendingSprints[row.channel_id];
+            const carried = pending ? [...pending.participants] : [];
+            delete pendingSprints[row.channel_id];
+            if (scheduledSprints[row.channel_id]) {
+              scheduledSprints[row.channel_id] = scheduledSprints[row.channel_id].filter(s => s.number !== row.sprint_number);
+            }
+            await deleteScheduledSprint(row.channel_id, row.sprint_number);
+            await startSprint(row.channel_id, 'Readathon Sprint', row.duration, row.sprint_number, carried, guild);
+            await postSprintStart(row.channel_id);
+          }, 15 * 60 * 1000)
+        };
+        await savePendingSprint(row.channel_id, pendingSprints[row.channel_id]);
+      }, msUntilWarning) : null;
+
+      const pendingTimer = msUntilWarning <= 0 ? setTimeout(async () => {
+        const pending = pendingSprints[row.channel_id];
+        const carried = pending ? [...pending.participants] : [];
+        delete pendingSprints[row.channel_id];
+        if (scheduledSprints[row.channel_id]) {
+          scheduledSprints[row.channel_id] = scheduledSprints[row.channel_id].filter(s => s.number !== row.sprint_number);
+        }
+        await deleteScheduledSprint(row.channel_id, row.sprint_number);
+        await startSprint(row.channel_id, 'Readathon Sprint', row.duration, row.sprint_number, carried, guild);
+        await postSprintStart(row.channel_id);
+      }, msUntilStart) : null;
+
+      scheduledSprints[row.channel_id].push({
+        number: row.sprint_number,
+        minutes: row.duration,
+        startTime: row.start_time,
+        guildId: row.guild_id,
+        participants: row.participants || [],
+        warningTimer,
+        pendingTimer
+      });
+
+      console.log(`Restored Readathon Sprint #${row.sprint_number} in channel ${row.channel_id}`);
+    }
+
+    // Restore pending sprints
+    const pendingResult = await pool.query('SELECT * FROM pending_sprints');
+    for (const row of pendingResult.rows) {
+      const msUntilStart = row.starts_at - Date.now();
+
+      if (msUntilStart <= 0) {
+        await deletePendingSprint(row.channel_id);
+        continue;
+      }
+
+      pendingSprints[row.channel_id] = {
+        type: row.type,
+        duration: row.duration,
+        startsAt: row.starts_at,
+        guildId: row.guild_id,
+        participants: row.participants || [],
+        sprintNumber: row.sprint_number,
+        pendingTimer: setTimeout(async () => {
+          const pending = pendingSprints[row.channel_id];
+          const carriedParticipants = pending ? [...pending.participants] : [];
+          delete pendingSprints[row.channel_id];
+          await deletePendingSprint(row.channel_id);
+          await startSprint(row.channel_id, row.type, row.duration, row.sprint_number, carriedParticipants, guild);
+          await postSprintStart(row.channel_id);
+        }, msUntilStart)
+      };
+
+      console.log(`Restored pending ${row.type} in channel ${row.channel_id}`);
+    }
+
+    // Restore active sprints
+    const activeResult = await pool.query('SELECT * FROM active_sprints');
+    for (const row of activeResult.rows) {
+      const msRemaining = row.end_time - Date.now();
+
+      if (msRemaining <= 0) {
+        // Sprint already ended while bot was down — post whatever was submitted
+        if (Object.keys(row.final_times).length > 0) {
+          await postLeaderboard(row.channel_id, guild);
+        } else {
+          await deleteActiveSprint(row.channel_id);
+        }
+        continue;
+      }
+
+      activeSprints[row.channel_id] = {
+        type: row.type,
+        duration: row.duration,
+        startTime: row.start_time,
+        endTime: row.end_time,
+        participants: row.participants || [],
+        originalParticipants: new Set(row.original_participants || []),
+        finalTimes: row.final_times || {},
+        submittedUsers: new Set(row.submitted_users || []),
+        sprintNumber: row.sprint_number,
+        guildId: row.guild_id,
+
+        timer: setTimeout(async () => {
+          const sprint = activeSprints[row.channel_id];
+          if (!sprint) return;
+          const channel = await client.channels.fetch(row.channel_id);
+          const verb = sprintVerbs[sprint.type];
+          const submitWindow = sprint.duration <= 30 ? 5 : 7;
+          const finalDeadline = Math.floor((Date.now() + submitWindow * 60 * 1000) / 1000);
+          const mentions = sprint.originalParticipants.size > 0
+            ? [...sprint.originalParticipants].map(id => `<@${id}>`).join(', ')
+            : null;
+          const endEmoji = randomEmoji(sprint.type);
+          const sprintLabel = sprint.sprintNumber ? `Readathon Sprint #${sprint.sprintNumber}` : sprint.type;
+          const participantText = mentions ? `\n\n✨ **Participants:**\n${mentions}` : '\n\n✨ **Participants:**';
+          await channel.send(`${endEmoji} **THE SPRINT IS OVER** ${endEmoji}\n\nThis **${sprintLabel}** is over, please put in the amount of time you ${verb}. The leaderboard will post <t:${finalDeadline}:R>, you have until then to put in your final count!${participantText}`);
+
+          sprint.reminderTimer = setTimeout(async () => {
+            const unsubmitted = [...sprint.originalParticipants].filter(id => !sprint.submittedUsers.has(id));
+            if (unsubmitted.length > 0) {
+              const reminderMentions = unsubmitted.map(id => `<@${id}>`).join(', ');
+              await channel.send(`‼️ **Reminder:**\n${reminderMentions}\nYou have 2 minutes left to submit your final time with \`/final\`!`);
+            }
+          }, (submitWindow - 2) * 60 * 1000);
+
+          const allAlreadySubmitted = [...sprint.originalParticipants].every(id => sprint.submittedUsers.has(id));
+          if (allAlreadySubmitted && Object.keys(sprint.finalTimes).length > 0) {
+            await postLeaderboard(row.channel_id, guild);
+          } else {
+            sprint.finalTimer = setTimeout(() => postLeaderboard(row.channel_id, guild), submitWindow * 60 * 1000);
+          }
+        }, msRemaining)
+      };
+
+      console.log(`Restored active ${row.type} in channel ${row.channel_id} with ${msRemaining}ms remaining`);
+    }
+
+    console.log('Sprint state restored!');
+  } catch (error) {
+    console.error('Error restoring sprint state:', error);
+  }
+}
+
 // ---- COMMAND REGISTRATION ----
 async function registerCommands() {
   const commands = [
@@ -1051,6 +1222,7 @@ client.once('clientReady', async () => {
   await initializeDatabase();
   await initializeLastProcessedRow();
   await registerCommands();
+  await restoreSprintState();
 
   cron.schedule('*/30 * * * *', () => {
     postHouseLeaderboard();
