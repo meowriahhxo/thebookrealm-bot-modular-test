@@ -883,6 +883,23 @@ async function registerCommands() {
       .setDescription('Retrieve stats for a specific period (i.e., April 2026 or 2026)')
       .setRequired(false))
     .toJSON(),
+    new SlashCommandBuilder()
+  .setName('export')
+  .setDescription('Export sprint data as a CSV')
+  .addStringOption(opt =>
+    opt.setName('period')
+      .setDescription('The time period to export')
+      .setRequired(true)
+      .addChoices(
+        { name: 'Monthly', value: 'monthly' },
+        { name: 'Yearly', value: 'yearly' },
+        { name: 'Lifetime', value: 'lifetime' }
+      ))
+  .addStringOption(opt =>
+    opt.setName('date')
+      .setDescription('Specific period (e.g., April 2026 or 2026) — leave blank for current month')
+      .setRequired(false))
+  .toJSON(),
   ];
 
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
