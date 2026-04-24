@@ -639,12 +639,12 @@ async function postLeaderboard(channelId, guild) {
   leaderboard += `\nMinutes Read: **${totalTime} minutes** in a **${sprint.duration} minute** sprint!\n`;
   leaderboard += `\nThanks for joining us. You can use the \`/sprint\` command to start another sprint!\n\n`;
 
-  await channel.send(leaderboard);
+  const leaderboardMessage = await channel.send(leaderboard);
 
   clearTimeout(sprint.timer);
   clearTimeout(sprint.finalTimer);
   clearTimeout(sprint.reminderTimer);
-  await writeSprintToSheets(sprint.finalTimes, guild, sprint.type, sprint.sprintNumber);
+  const writeSuccess = await writeSprintToSheets(sprint.finalTimes, guild, sprint.type, sprint.sprintNumber);
 
   if (sprint.type === 'Tall Tomes Sprint' || sprint.type === 'Short Stacks Sprint' || sprint.type === 'Readathon Sprint') {
     for (const [userId, minutes] of Object.entries(sprint.finalTimes)) {
@@ -653,6 +653,14 @@ async function postLeaderboard(channelId, guild) {
       } catch (error) {
         console.error('Error saving sprint result to database:', error);
       }
+    }
+  }
+
+  if (writeSuccess) {
+    try {
+      await leaderboardMessage.react('🤖');
+    } catch (error) {
+      console.error('Error reacting to leaderboard message:', error);
     }
   }
 
@@ -728,8 +736,10 @@ async function writeCreativeSprints(sprintResults, guild, sprintType) {
     }
 
     console.log(`${sprintType} results fully written to Points spreadsheet!`);
+    return true;
   } catch (error) {
     console.error(`Error writing ${sprintType} to Points spreadsheet:`, error);
+    return false;
   }
 }
 
@@ -817,24 +827,26 @@ async function writeReadathonToSheets(sprintResults, guild, sprintNumber) {
       }
     }
     console.log(`Readathon Sprint #${sprintNumber} results fully written to Readathon Leaderboard!`);
+    return true;
   } catch (error) {
     console.error('Error writing to Readathon Leaderboard:', error);
+    return false;
   }
 }
 
 async function writeSprintToSheets(sprintResults, guild, sprintType, sprintNumber = null) {
   try {
     if (sprintType === 'Writing Sprint' || sprintType === 'Art Sprint' || sprintType === 'Study Sprint') {
-      await writeCreativeSprints(sprintResults, guild, sprintType);
-      return;
+      return await writeCreativeSprints(sprintResults, guild, sprintType);
     }
 
+    let readathonSuccess = true;
     if (sprintType === 'Readathon Sprint') {
-      await writeReadathonToSheets(sprintResults, guild, sprintNumber);
+      readathonSuccess = await writeReadathonToSheets(sprintResults, guild, sprintNumber);
     }
 
     if (sprintType !== 'Tall Tomes Sprint' && sprintType !== 'Short Stacks Sprint' && sprintType !== 'Readathon Sprint') {
-      return;
+      return false;
     }
 
     const auth = await getAuth();
@@ -909,8 +921,10 @@ async function writeSprintToSheets(sprintResults, guild, sprintType, sprintNumbe
     }
 
     console.log(`Sprint results written to ${tabName} and 2026 Overall!`);
+    return readathonSuccess;
   } catch (error) {
     console.error('Error writing to Google Sheets:', error);
+    return false;
   }
 }
 
@@ -1251,6 +1265,8 @@ client.on('interactionCreate', async interaction => {
       clearTimeout(sprint.warningTimer);
       clearTimeout(sprint.finalTimer);
       clearTimeout(sprint.reminderTimer);
+      await deleteActiveSprint(channelId);
+      await deletePendingSprint(channelId);
       delete activeSprints[channelId];
       delete pendingSprints[channelId];
       await interaction.update({ content: `The **${sprint.type}** has been cancelled. <@&${roleId}>`, components: [] });
