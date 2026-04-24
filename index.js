@@ -578,6 +578,21 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
       }
     }, minutes * 60 * 1000)
   };
+
+  // Save sprint state to database
+  await saveActiveSprint(channelId, {
+    guildId: guild.id,
+    type,
+    duration: minutes,
+    startTime: activeSprints[channelId].startTime,
+    endTime: activeSprints[channelId].endTime,
+    sprintNumber,
+    participants: [...carriedParticipants],
+    originalParticipants: new Set(carriedParticipants),
+    finalTimes: {},
+    submittedUsers: new Set()
+  });
+  await deletePendingSprint(channelId);
 }
 
 async function postSprintStart(channelId) {
@@ -631,16 +646,17 @@ async function postLeaderboard(channelId, guild) {
   clearTimeout(sprint.reminderTimer);
   await writeSprintToSheets(sprint.finalTimes, guild, sprint.type, sprint.sprintNumber);
 
-// Save reading sprint results to PostgreSQL
-if (sprint.type === 'Tall Tomes Sprint' || sprint.type === 'Short Stacks Sprint' || sprint.type === 'Readathon Sprint') {
-  for (const [userId, minutes] of Object.entries(sprint.finalTimes)) {
-    try {
-      await saveSprintResult(userId, guild.id, sprint.type, minutes);
-    } catch (error) {
-      console.error('Error saving sprint result to database:', error);
+  if (sprint.type === 'Tall Tomes Sprint' || sprint.type === 'Short Stacks Sprint' || sprint.type === 'Readathon Sprint') {
+    for (const [userId, minutes] of Object.entries(sprint.finalTimes)) {
+      try {
+        await saveSprintResult(userId, guild.id, sprint.type, minutes);
+      } catch (error) {
+        console.error('Error saving sprint result to database:', error);
+      }
     }
   }
-}
+
+  await deleteActiveSprint(channelId);
   delete activeSprints[channelId];
 }
 
@@ -1451,6 +1467,7 @@ if (interaction.commandName === 'export') {
         await postSprintStart(channelId);
       }, startsIn * 60 * 1000)
     };
+    await savePendingSprint(channelId, pendingSprints[channelId]);
   }
 
   // ---- /schedule ----
@@ -1554,6 +1571,8 @@ if (interaction.commandName === 'export') {
 
     scheduledSprints[channelId].sort((a, b) => a.startTime - b.startTime);
 
+    await saveScheduledSprint(channelId, scheduledSprints[channelId].find(s => s.number === number));
+
     await interaction.reply(`✅ Readathon Sprint #${number} scheduled for <t:${startTimestamp}:t>! It will post 15 minutes before its start time.`);
   }
 
@@ -1577,6 +1596,7 @@ if (interaction.commandName === 'export') {
         delete pendingSprints[channelId];
       }
 
+      await deleteScheduledSprint(channelId, sprintNumber);
       const scheduledTimestamp = Math.floor(scheduled.startTime / 1000);
       await interaction.reply(`Readathon Sprint #${sprintNumber} (scheduled for <t:${scheduledTimestamp}:t>) has been cancelled.`);
       return;
@@ -1610,6 +1630,8 @@ if (interaction.commandName === 'export') {
       clearTimeout(sprint.warningTimer);
       clearTimeout(sprint.finalTimer);
       clearTimeout(sprint.reminderTimer);
+      await deleteActiveSprint(channelId);
+      await deletePendingSprint(channelId);
       delete activeSprints[channelId];
       delete pendingSprints[channelId];
 
@@ -1642,6 +1664,9 @@ if (interaction.commandName === 'export') {
     sprint.participants.push(interaction.user.id);
     if (activeSprints[channelId]) {
       sprint.originalParticipants.add(interaction.user.id);
+      await saveActiveSprint(channelId, { ...activeSprints[channelId], guildId: interaction.guild.id });
+    } else if (pendingSprints[channelId]) {
+      await savePendingSprint(channelId, pendingSprints[channelId]);
     }
     await interaction.reply(`<@${interaction.user.id}> has joined the **${sprint.type}**!`);
   }
@@ -1709,6 +1734,7 @@ if (interaction.commandName === 'export') {
     sprint.submittedUsers.add(interaction.user.id);
     sprint.originalParticipants.add(interaction.user.id);
     sprint.participants = sprint.participants.filter(id => id !== interaction.user.id);
+    await saveActiveSprint(channelId, { ...sprint, guildId: interaction.guild.id });
 
     await interaction.reply(`<@${interaction.user.id}> has ${verb} for **${minutes} minutes**!`);
 
