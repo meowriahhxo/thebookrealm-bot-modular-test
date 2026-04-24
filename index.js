@@ -118,6 +118,44 @@ async function initializeDatabase() {
         sprint_date DATE NOT NULL
       )
     `);
+    await pool.query(`
+  CREATE TABLE IF NOT EXISTS active_sprints (
+    channel_id TEXT PRIMARY KEY,
+    guild_id TEXT NOT NULL,
+    type TEXT NOT NULL,
+    duration INTEGER NOT NULL,
+    start_time BIGINT NOT NULL,
+    end_time BIGINT NOT NULL,
+    sprint_number INTEGER,
+    participants TEXT[] DEFAULT '{}',
+    original_participants TEXT[] DEFAULT '{}',
+    final_times JSONB DEFAULT '{}',
+    submitted_users TEXT[] DEFAULT '{}'
+  )
+`);
+
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS pending_sprints (
+    channel_id TEXT PRIMARY KEY,
+    guild_id TEXT NOT NULL,
+    type TEXT NOT NULL,
+    duration INTEGER NOT NULL,
+    starts_at BIGINT NOT NULL,
+    sprint_number INTEGER,
+    participants TEXT[] DEFAULT '{}'
+  )
+`);
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS scheduled_sprints (
+    id SERIAL PRIMARY KEY,
+    channel_id TEXT NOT NULL,
+    guild_id TEXT NOT NULL,
+    sprint_number INTEGER NOT NULL,
+    duration INTEGER NOT NULL,
+    start_time BIGINT NOT NULL,
+    participants TEXT[] DEFAULT '{}'
+  )
+`);
     console.log('Database initialized!');
   } catch (error) {
     console.error('Database initialization error:', error);
