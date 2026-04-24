@@ -976,7 +976,7 @@ async function restoreSprintState() {
         await savePendingSprint(row.channel_id, pendingSprints[row.channel_id]);
       }, msUntilWarning) : null;
 
-      const pendingTimer = msUntilWarning <= 0 ? setTimeout(async () => {
+      const pendingTimer = (msUntilWarning <= 0 && !pendingSprints[row.channel_id]) ? setTimeout(async () => {
         const pending = pendingSprints[row.channel_id];
         const carried = pending ? [...pending.participants] : [];
         delete pendingSprints[row.channel_id];
