@@ -1231,6 +1231,10 @@ async function registerCommands() {
       .setDescription('Specific period (e.g., April 2026 or 2026) — leave blank for current month')
       .setRequired(false))
   .toJSON(),
+  new SlashCommandBuilder()
+  .setName('scheduled')
+  .setDescription('View all upcoming scheduled sprints (mod only)')
+  .toJSON(),
   ];
 
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
@@ -1548,6 +1552,41 @@ if (interaction.commandName === 'export') {
 
   } catch (error) {
     console.error('Error handling export command:', error);
+  }
+}
+
+// ---- /scheduled ----
+if (interaction.commandName === 'scheduled') {
+  try {
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+    const isMod = member.roles.cache.has(process.env.MOD_ROLE_ID);
+    if (!isMod) {
+      await interaction.reply({ content: 'You do not have permission to use this command.', flags: 64 });
+      return;
+    }
+
+    const allScheduled = [];
+    for (const [channelId, sprints] of Object.entries(scheduledSprints)) {
+      for (const sprint of sprints) {
+        allScheduled.push({ ...sprint, channelId });
+      }
+    }
+
+    allScheduled.sort((a, b) => a.startTime - b.startTime);
+
+    if (allScheduled.length === 0) {
+      await interaction.reply({ content: 'There are no sprints currently scheduled.' });
+      return;
+    }
+
+    const lines = allScheduled.map(s => {
+      const timestamp = Math.floor(s.startTime / 1000);
+      return `**Readathon Sprint #${s.number}** — <#${s.channelId}> — starts <t:${timestamp}:R> at <t:${timestamp}:t> — ${s.minutes} minutes long`;
+    });
+
+    await interaction.reply({ content: `📅 **Upcoming Scheduled Sprints:**\n\n${lines.join('\n')}` });
+  } catch (error) {
+    console.error('Error handling scheduled command:', error);
   }
 }
 
