@@ -1082,6 +1082,118 @@ if (date) {
   }
 }
 
+// ---- /export ----
+if (interaction.commandName === 'export') {
+  try {
+    await interaction.deferReply({ flags: 64 });
+
+    // Check if the user has the mod role
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+    const isMod = member.roles.cache.has(process.env.MOD_ROLE_ID);
+    if (!isMod) {
+      await interaction.editReply({ content: 'You do not have permission to use this command.' });
+      return;
+    }
+
+    const period = interaction.options.getString('period');
+    const date = interaction.options.getString('date');
+
+    const now = new Date();
+    const easternTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const currentMonth = monthNames[easternTime.getMonth()];
+    const currentYear = easternTime.getFullYear();
+
+    let month;
+    if (date) {
+      month = date.split(' ')[0];
+    } else {
+      month = currentMonth;
+    }
+
+    let year;
+    if (date) {
+      const parts = date.split(' ');
+      year = parseInt(parts.length === 1 ? parts[0] : parts[1]);
+    } else {
+      year = currentYear;
+    }
+
+    // Query grouped by user, with totals
+    let result;
+    if (period === 'monthly') {
+      result = await pool.query(
+        'SELECT user_id, COUNT(*) as sprints_joined, SUM(minutes) as total_minutes FROM sprint_results WHERE EXTRACT(MONTH FROM sprint_date) = $1 AND EXTRACT(YEAR FROM sprint_date) = $2 GROUP BY user_id',
+        [monthNames.indexOf(month) + 1, year]
+      );
+    } else if (period === 'yearly') {
+      result = await pool.query(
+        'SELECT user_id, COUNT(*) as sprints_joined, SUM(minutes) as total_minutes FROM sprint_results WHERE EXTRACT(YEAR FROM sprint_date) = $1 GROUP BY user_id',
+        [year]
+      );
+    } else {
+      result = await pool.query(
+        'SELECT user_id, COUNT(*) as sprints_joined, SUM(minutes) as total_minutes FROM sprint_results GROUP BY user_id'
+      );
+    }
+
+    if (result.rows.length === 0) {
+      await interaction.editReply({ content: 'No sprint data found for that period.' });
+      return;
+    }
+
+    const houseRoles = {
+      [process.env.ASPHODEL_ROLE_ID]: 'Asphodel',
+      [process.env.DREANNI_ROLE_ID]: 'Dreanni',
+      [process.env.LAIIDON_ROLE_ID]: 'Laiidon',
+      [process.env.ZELDARIAN_ROLE_ID]: 'Zeldarian',
+    };
+
+    // Build CSV rows
+    const csvRows = ['user_id,username,house,sprints_joined,total_minutes'];
+
+    for (const row of result.rows) {
+      let username = row.user_id;
+      let house = 'Unknown';
+
+      try {
+        const guildMember = await interaction.guild.members.fetch(row.user_id);
+        username = guildMember.user.username;
+        for (const [roleId, houseName] of Object.entries(houseRoles)) {
+          if (guildMember.roles.cache.has(roleId)) {
+            house = houseName;
+            break;
+          }
+        }
+      } catch {
+        // Member may have left the server — keep user_id as username and Unknown as house
+      }
+
+      csvRows.push(`${row.user_id},${username},${house},${row.sprints_joined},${row.total_minutes}`);
+    }
+
+    const csvContent = csvRows.join('\n');
+
+    // Build period label for filename
+    let periodLabel;
+    if (period === 'monthly') {
+      periodLabel = `${month}_${year}`;
+    } else if (period === 'yearly') {
+      periodLabel = `${year}`;
+    } else {
+      periodLabel = 'lifetime';
+    }
+
+    const attachment = new AttachmentBuilder(Buffer.from(csvContent, 'utf-8'), {
+      name: `sprint_export_${periodLabel}.csv`
+    });
+
+    await interaction.editReply({ content: `Here is the sprint export for **${period === 'lifetime' ? 'Lifetime' : periodLabel.replace('_', ' ')}**!`, files: [attachment] });
+
+  } catch (error) {
+    console.error('Error handling export command:', error);
+  }
+}
+
   // ---- /stick ----
   if (interaction.commandName === 'stick') {
     try {
