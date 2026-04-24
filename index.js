@@ -933,14 +933,12 @@ async function restoreSprintState() {
   try {
     const guild = client.guilds.cache.first();
 
-    // Restore scheduled sprints
-    const scheduledResult = await pool.query('SELECT * FROM scheduled_sprints');
-    for (const row of scheduledResult.rows) {
-      const msUntilStart = row.start_time - Date.now();
-      const msUntilWarning = msUntilStart - 15 * 60 * 1000;
+    // Restore pending sprints FIRST so the check in scheduled sprints works
+    const pendingResult = await pool.query('SELECT * FROM pending_sprints');
+    for (const row of pendingResult.rows) {
+      const msUntilStart = row.starts_at - Date.now();
 
       if (msUntilStart <= 0) {
-        // If it was less than the sprint duration ago, start it immediately with remaining time
         const missedBy = Math.abs(msUntilStart);
         const sprintDurationMs = row.duration * 60 * 1000;
         if (missedBy < sprintDurationMs) {
@@ -952,6 +950,37 @@ async function restoreSprintState() {
         } else {
           await deletePendingSprint(row.channel_id);
         }
+        continue;
+      }
+
+      pendingSprints[row.channel_id] = {
+        type: row.type,
+        duration: row.duration,
+        startsAt: row.starts_at,
+        guildId: row.guild_id,
+        participants: row.participants || [],
+        sprintNumber: row.sprint_number,
+        pendingTimer: setTimeout(async () => {
+          const pending = pendingSprints[row.channel_id];
+          const carriedParticipants = pending ? [...pending.participants] : [];
+          delete pendingSprints[row.channel_id];
+          await deletePendingSprint(row.channel_id);
+          await startSprint(row.channel_id, row.type, row.duration, row.sprint_number, carriedParticipants, guild);
+          await postSprintStart(row.channel_id);
+        }, msUntilStart)
+      };
+
+      console.log(`Restored pending ${row.type} in channel ${row.channel_id}`);
+    }
+
+    // Restore scheduled sprints SECOND
+    const scheduledResult = await pool.query('SELECT * FROM scheduled_sprints');
+    for (const row of scheduledResult.rows) {
+      const msUntilStart = row.start_time - Date.now();
+      const msUntilWarning = msUntilStart - 15 * 60 * 1000;
+
+      if (msUntilStart <= 0) {
+        await deleteScheduledSprint(row.channel_id, row.sprint_number);
         continue;
       }
 
@@ -1011,43 +1040,12 @@ async function restoreSprintState() {
       console.log(`Restored Readathon Sprint #${row.sprint_number} in channel ${row.channel_id}`);
     }
 
-    // Restore pending sprints
-    const pendingResult = await pool.query('SELECT * FROM pending_sprints');
-    for (const row of pendingResult.rows) {
-      const msUntilStart = row.starts_at - Date.now();
-
-      if (msUntilStart <= 0) {
-        await deletePendingSprint(row.channel_id);
-        continue;
-      }
-
-      pendingSprints[row.channel_id] = {
-        type: row.type,
-        duration: row.duration,
-        startsAt: row.starts_at,
-        guildId: row.guild_id,
-        participants: row.participants || [],
-        sprintNumber: row.sprint_number,
-        pendingTimer: setTimeout(async () => {
-          const pending = pendingSprints[row.channel_id];
-          const carriedParticipants = pending ? [...pending.participants] : [];
-          delete pendingSprints[row.channel_id];
-          await deletePendingSprint(row.channel_id);
-          await startSprint(row.channel_id, row.type, row.duration, row.sprint_number, carriedParticipants, guild);
-          await postSprintStart(row.channel_id);
-        }, msUntilStart)
-      };
-
-      console.log(`Restored pending ${row.type} in channel ${row.channel_id}`);
-    }
-
-    // Restore active sprints
+    // Restore active sprints LAST
     const activeResult = await pool.query('SELECT * FROM active_sprints');
     for (const row of activeResult.rows) {
       const msRemaining = row.end_time - Date.now();
 
       if (msRemaining <= 0) {
-        // Sprint already ended while bot was down — post whatever was submitted
         if (Object.keys(row.final_times).length > 0) {
           await postLeaderboard(row.channel_id, guild);
         } else {
