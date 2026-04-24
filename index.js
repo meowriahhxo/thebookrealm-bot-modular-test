@@ -546,10 +546,12 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
     finalTimes: {},
     submittedUsers: new Set(),
     sprintNumber,
+    endMessageSent: false,
 
     timer: setTimeout(async () => {
       const sprint = activeSprints[channelId];
-      if (!sprint) return;
+      if (!sprint || sprint.endMessageSent) return;
+      sprint.endMessageSent = true;
 
       const verb = sprintVerbs[sprint.type];
       const submitWindow = minutes <= 30 ? 5 : 7;
@@ -1065,10 +1067,12 @@ async function restoreSprintState() {
         submittedUsers: new Set(row.submitted_users || []),
         sprintNumber: row.sprint_number,
         guildId: row.guild_id,
+        endMessageSent: false,
 
         timer: setTimeout(async () => {
           const sprint = activeSprints[row.channel_id];
-          if (!sprint) return;
+          if (!sprint || sprint.endMessageSent) return;
+          sprint.endMessageSent = true;
           const channel = await client.channels.fetch(row.channel_id);
           const verb = sprintVerbs[sprint.type];
           const submitWindow = sprint.duration <= 30 ? 5 : 7;
@@ -1233,7 +1237,7 @@ async function registerCommands() {
   .toJSON(),
   new SlashCommandBuilder()
   .setName('scheduled')
-  .setDescription('View all upcoming scheduled sprints (mod only)')
+  .setDescription('View all upcoming scheduled sprints')
   .toJSON(),
   ];
 
