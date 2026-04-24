@@ -940,8 +940,18 @@ async function restoreSprintState() {
       const msUntilWarning = msUntilStart - 15 * 60 * 1000;
 
       if (msUntilStart <= 0) {
-        // Already passed, clean up
-        await deleteScheduledSprint(row.channel_id, row.sprint_number);
+        // If it was less than the sprint duration ago, start it immediately with remaining time
+        const missedBy = Math.abs(msUntilStart);
+        const sprintDurationMs = row.duration * 60 * 1000;
+        if (missedBy < sprintDurationMs) {
+          console.log(`Pending sprint missed start by ${Math.floor(missedBy / 1000)}s, starting immediately`);
+          const carriedParticipants = row.participants || [];
+          await deletePendingSprint(row.channel_id);
+          await startSprint(row.channel_id, row.type, row.duration, row.sprint_number, carriedParticipants, guild);
+          await postSprintStart(row.channel_id);
+        } else {
+          await deletePendingSprint(row.channel_id);
+        }
         continue;
       }
 
