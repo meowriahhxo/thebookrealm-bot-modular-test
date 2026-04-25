@@ -1684,7 +1684,7 @@ if (interaction.commandName === 'scheduled') {
     if (fixedDurations[type]) {
       minutes = fixedDurations[type];
     } else {
-      if (!inputMinutes || inputMinutes < 1 || inputMinutes > 60) {
+      if (!inputMinutes || inputMinutes < 15 || inputMinutes > 60) {
         await interaction.reply({ content: `Please provide a duration between 15 and 60 minutes for a **${type}**!`, flags: 64 });
         return;
       }
@@ -2048,7 +2048,7 @@ client.on('messageCreate', async message => {
         if (fixedDurations[type]) {
           minutes = fixedDurations[type];
         } else {
-          if (!inputMinutes || inputMinutes < 1 || inputMinutes > 60) {
+          if (!inputMinutes || inputMinutes < 15 || inputMinutes > 60) {
             await message.reply(`Please provide a duration between 15 and 60 minutes for a **${type}**!`);
             return;
           }
