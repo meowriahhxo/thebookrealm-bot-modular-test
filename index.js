@@ -1737,7 +1737,7 @@ if (interaction.commandName === 'scheduled') {
     }
 
     const msUntilStart = startTime.getTime() - Date.now();
-    const msUntilWarning = msUntilStart - 2 * 60 * 1000;
+    const msUntilWarning = msUntilStart - 15 * 60 * 1000;
     const startTimestamp = Math.floor(startTime.getTime() / 1000);
 
     if (msUntilStart <= 0) {
@@ -1788,7 +1788,7 @@ if (interaction.commandName === 'scheduled') {
           const guild = client.guilds.cache.get(interaction.guild.id);
           await startSprint(channelId, 'Readathon Sprint', minutes, number, carried, guild);
           await postSprintStart(channelId);
-        }, 2 * 60 * 1000)
+        }, 15 * 60 * 1000)
       };
     }, msUntilWarning) : null;
 
