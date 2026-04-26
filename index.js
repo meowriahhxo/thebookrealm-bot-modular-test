@@ -672,7 +672,7 @@ async function postLeaderboard(channelId, guild) {
     await leaderboardMessage.react('🤖');
     const sprintLabel = sprint.sprintNumber ? `Readathon Sprint #${sprint.sprintNumber}` : sprint.type;
     const endedAt = new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' });
-    const messageLink = `https://discord.com/channels/${sprint.guildId}/${channelId}/${leaderboardMessage.id}`;
+    const messageLink = `https://discord.com/channels/${process.env.GUILD_ID}/${channelId}/${leaderboardMessage.id}`;
     const threadId = sprintSpamThreads[sprint.type];
     if (threadId) {
       const thread = await client.channels.fetch(threadId);
@@ -1705,7 +1705,7 @@ if (interaction.commandName === 'scheduled') {
     if (fixedDurations[type]) {
       minutes = fixedDurations[type];
     } else {
-      if (!inputMinutes || inputMinutes < 15 || inputMinutes > 60) {
+      if (!inputMinutes || inputMinutes < 1 || inputMinutes > 60) {
         await interaction.reply({ content: `Please provide a duration between 15 and 60 minutes for a **${type}**!`, flags: 64 });
         return;
       }
@@ -2069,7 +2069,7 @@ client.on('messageCreate', async message => {
         if (fixedDurations[type]) {
           minutes = fixedDurations[type];
         } else {
-          if (!inputMinutes || inputMinutes < 15 || inputMinutes > 60) {
+          if (!inputMinutes || inputMinutes < 1 || inputMinutes > 60) {
             await message.reply(`Please provide a duration between 15 and 60 minutes for a **${type}**!`);
             return;
           }
