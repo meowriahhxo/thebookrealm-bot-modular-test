@@ -655,7 +655,7 @@ async function postSprintStart(channelId) {
     ? sprint.participants.map(id => `<@${id}>`).join(', ')
     : '';
 
-  await channel.send(`<a:asphbook:1492926281602564257><a:dreannibook:1492927023868281062> **START SPRINTING** <a:laiidonbook:1492927039114842122> <a:zeldbook:1492927053748502780>\n\nThe **${sprintLabel}** has begun. the sprint will end <t:${endTime}:R>, at <t:${endTime}:t>. ${happyVerb}\n\n✨ **Participants:**\n${mentions}`);
+  await channel.send(`${emoji} **START SPRINTING** ${emoji}\n\nThe **${sprintLabel}** has begun. the sprint will end <t:${endTime}:R>, at <t:${endTime}:t>. ${happyVerb}\n\n✨ **Participants:**\n${mentions}`);
 }
 
 async function postLeaderboard(channelId, guild) {
