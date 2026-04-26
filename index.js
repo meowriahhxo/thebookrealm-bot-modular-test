@@ -106,6 +106,42 @@ const sprintSpamThreads = {
   'Study Sprint': process.env.STUDY_SPAM_THREAD_ID,
 };
 
+//-----MORNING MESSAGE CONSTANTS----
+// 🔄 CHANGE THIS EACH MONTH
+const CHECKIN_EMOJI = '🐰';
+
+const COMMON_ROOM_EMOJIS = [
+  '🪥', '🛏️', '👑', '💊', '👕',
+  '🦷', '⚕️', '🚿', '🥛', '🍕',
+  '📖', CHECKIN_EMOJI
+];
+
+const COMMON_ROOM_HOUSES = [
+  {
+    channelId: process.env.ASPHODEL_COMMONROOM_CHANNEL_ID,
+    roleId: process.env.ASPHODEL_ROLE_ID,
+    name: 'Asphodel',
+  },
+  {
+    channelId: process.env.DREANNI_COMMONROOM_CHANNEL_ID,
+    roleId: process.env.DREANNI_ROLE_ID,
+    name: 'Dreanni',
+  },
+  {
+    channelId: process.env.LAIIDON_COMMONROOM_CHANNEL_ID,
+    roleId: process.env.LAIIDON_ROLE_ID,
+    name: 'Laiidon',
+  },
+  {
+    channelId: process.env.ZELDARIAN_COMMONROOM_CHANNEL_ID,
+    roleId: process.env.ZELDARIAN_ROLE_ID,
+    name: 'Zeldarian',
+  },
+];
+
+const commonRoomMessageIds = {};
+
+
 // ---- DATABASE ----
 async function initializeDatabase() {
   try {
@@ -619,7 +655,7 @@ async function postSprintStart(channelId) {
     ? sprint.participants.map(id => `<@${id}>`).join(', ')
     : '';
 
-  await channel.send(`${emoji} **START SPRINTING** ${emoji}\n\nThe **${sprintLabel}** has begun. the sprint will end <t:${endTime}:R>, at <t:${endTime}:t>. ${happyVerb}\n\n✨ **Participants:**\n${mentions}`);
+  await channel.send(`<a:asphbook:1492926281602564257><a:dreannibook:1492927023868281062> **START SPRINTING** <a:laiidonbook:1492927039114842122> <a:zeldbook:1492927053748502780>\n\nThe **${sprintLabel}** has begun. the sprint will end <t:${endTime}:R>, at <t:${endTime}:t>. ${happyVerb}\n\n✨ **Participants:**\n${mentions}`);
 }
 
 async function postLeaderboard(channelId, guild) {
@@ -1282,6 +1318,53 @@ client.once('clientReady', async () => {
   cron.schedule('* * * * *', () => {
     checkForNewQuizSubmissions();
   });
+
+  // 8AM EST = 13:00 UTC
+cron.schedule('0 13 * * *', async () => {
+  console.log('Posting common room messages...');
+  for (const house of COMMON_ROOM_HOUSES) {
+    try {
+      const channel = await client.channels.fetch(house.channelId);
+      const message = await channel.send(
+        `<@&${house.roleId}> Hello, House ${house.name}! Have you done these?\n**Please react to this message in order of the emojis shown!**\n*-# (If you haven't done them yet, but you know you will, you can still react)*\n\n__**Morning Tasks**__\n🪥 | Brushed your teeth?\n🛏️ | Made your bed?\n👑 | Styled your hair?\n💊 | Took medication?\n👕 | Got dressed?\n\n__**Evening Tasks**__\n🦷 | Brushed your teeth?\n⚕️ | Took additional medication?\n🚿 | Had a wash today? - includes washing hands, face etc.\n🥛 | Had a drink today?\n🍕 | Had a meal today?\n📖 | Read your book?\n\n**Also make sure to Check In!**\n${CHECKIN_EMOJI} | Check in\n\nRemember, we love you all and hope you have a wonderful day!\n♥️`
+      );
+      commonRoomMessageIds[house.channelId] = message.id;
+
+      for (const emoji of COMMON_ROOM_EMOJIS) {
+        await message.react(emoji);
+        await new Promise(res => setTimeout(res, 300));
+      }
+    } catch (err) {
+      console.error(`Failed to post common room message for ${house.name}:`, err);
+    }
+  }
+});
+
+// 5PM EST = 22:00 UTC
+cron.schedule('0 22 * * *', async () => {
+  console.log('Removing common room reactions...');
+  for (const house of COMMON_ROOM_HOUSES) {
+    try {
+      const messageId = commonRoomMessageIds[house.channelId];
+      if (!messageId) {
+        console.log(`No stored message ID for ${house.name}, skipping.`);
+        continue;
+      }
+      const channel = await client.channels.fetch(house.channelId);
+      const message = await channel.messages.fetch(messageId);
+
+      for (const emoji of COMMON_ROOM_EMOJIS) {
+        const reaction = message.reactions.cache.get(emoji);
+        if (reaction) {
+          await reaction.users.remove(client.user.id);
+          await new Promise(res => setTimeout(res, 300));
+        }
+      }
+    } catch (err) {
+      console.error(`Failed to remove reactions for ${house.name}:`, err);
+    }
+  }
+});
 });
 
 // ---- INTERACTION HANDLER ----
