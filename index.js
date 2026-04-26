@@ -1397,7 +1397,7 @@ client.on('interactionCreate', async interaction => {
   const channelId = interaction.channelId;
 
   // ---- BUTTON INTERACTIONS ----
-  if (interaction.isButton()) {
+if (interaction.isButton()) {
     if (interaction.customId === 'confirm_cancel') {
       const sprint = activeSprints[channelId] || pendingSprints[channelId];
       if (!sprint) {
@@ -1414,7 +1414,8 @@ client.on('interactionCreate', async interaction => {
       await deletePendingSprint(channelId);
       delete activeSprints[channelId];
       delete pendingSprints[channelId];
-      await interaction.update({ content: `The **${sprint.type}** has been cancelled. <@&${roleId}>`, components: [] });
+      await interaction.update({ content: `The **${sprint.type}** has been cancelled.`, components: [] });
+      await interaction.channel.send(`<@&${roleId}>`);
     }
 
     if (interaction.customId === 'deny_cancel') {
@@ -2010,7 +2011,8 @@ if (interaction.commandName === 'scheduled') {
       delete pendingSprints[channelId];
 
       const roleId = sprintRoles[sprint.type];
-      await interaction.reply(`The **${sprint.type}** has been cancelled. <@&${roleId}>`);
+      await interaction.reply(`The **${sprint.type}** has been cancelled.`);
+      await interaction.channel.send(`<@&${roleId}>`);
     }
   }
 
