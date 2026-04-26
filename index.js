@@ -97,6 +97,15 @@ const sprintRoles = {
   'Study Sprint': process.env.STUDY_ROLE_ID
 };
 
+const sprintSpamThreads = {
+  'Tall Tomes Sprint': process.env.READING_SPAM_THREAD_ID,
+  'Short Stacks Sprint': process.env.READING_SPAM_THREAD_ID,
+  'Readathon Sprint': process.env.READING_SPAM_THREAD_ID,
+  'Writing Sprint': process.env.WRITING_SPAM_THREAD_ID,
+  'Art Sprint': process.env.ART_SPAM_THREAD_ID,
+  'Study Sprint': process.env.STUDY_SPAM_THREAD_ID,
+};
+
 // ---- DATABASE ----
 async function initializeDatabase() {
   try {
