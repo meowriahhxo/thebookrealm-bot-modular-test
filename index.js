@@ -57,13 +57,38 @@ const channelSprintTypes = {
 };
 
 const sprintEmojis = {
-  'Tall Tomes Sprint': ['📚', '📖', '🔖', '🌙', '✨', '⭐'],
-  'Short Stacks Sprint': ['📚', '📖', '🔖', '🌙', '✨', '⭐'],
-  'Readathon Sprint': ['📚', '📖', '🔖', '🌙', '✨', '⭐'],
-  'Writing Sprint': ['✍️', '📝', '💫', '🖊️', '🌙', '⭐'],
-  'Art Sprint': ['🎨', '🖌️', '✨', '🌈', '💫', '🎭'],
-  'Study Sprint': ['📝', '📐', '💡', '🧠', '⭐', '🔍']
+  // Reading sprints - monthly
+  reading: {
+    'January': ['❄️', '⛸️', '⛄', '🥶', '🌨️', '🐦‍🔥', '🛷', '🩵', '💙', '🐐', '🏺'],
+    'February': ['🩷', '❤️', '💌', '💋', '🥰', '🫶', '❤️‍🔥', '🌹', '🍾', '🧁', '🏳️‍🌈', '🏩', '🏺', '🐟'],
+    'March': ['🍀', '🪙', '☘️', '💚', '🐏', '🕊️', '🌤️', '🌦️', '🌱', '🐣', '☔', '🐟', '🧹'],
+    'April': ['☔', '🌂', '☁️', '🌧️', '🐏', '🌤️', '🌦️', '🎂', '🥚', '🦖', '🌱', '🍫', '🐥', '🐇', '🐂', '🧹'],
+    'May': ['💐', '🌷', '⛅', '👒', '☀️', '🐝', '🪻', '🌿', '🌼', '🌸', '🍓', '🐂', '👯', '🧹'],
+    'June': ['🏳️‍🌈', '🌈', '🏳️‍⚧️', '✨', '☀️', '🐞', '⛱️', '🎓', '🐳', '🌴', '🍹', '🚤', '🌺', '🦀', '👯'],
+    'July': ['☀️', '🌺', '⛱️', '🧺', '🍉', '💫', '🏖️', '🐬', '🏝️', '🦩', '🥵', '🔥', '🌡️', '⛺', '🛶', '🦀', '🦁'],
+    'August': ['🦁', '🥵', '🦀', '🪸', '🐬', '🎂', '🏖️', '🪼', '🌊', '🧜‍♀️', '🌿', '🫧', '🫐', '🌺', '🍑', '🌻'],
+    'September': ['🌿', '⚖️', '🌻', '🍂', '🍑', '🎃', '🍃', '🍎', '🍄', '🍄‍🟫', '📚', '🌙', '🎒', '🍏'],
+    'October': ['⚖️', '🦂', '🍂', '🍁', '🎃', '🍎', '🕷️', '🕸️', '👻', '😱', '🌙', '🦇', '🖤', '🌕', '🕯️', '🐈‍⬛'],
+    'November': ['🏹', '🦂', '🍂', '🍁', '🐿️', '🧣', '🌽', '🪵', '🕯️', '🦃', '☕', '🥧', '🌙'],
+    'December': ['🐐', '🏹', '🎄', '🕯️', '❄️', '🎁', '⛄', '🌟', '🍪', '🥂', '🦌', '🎅']
+  },
+
+  // Creative sprints - fixed
+  'Writing Sprint': ['✍️', '📝', '🏫', '🖊️', '🏛️', '⌨️', '💻', '🖨️', '📠', '🗒️', '📃', '🖋️', '✏️'],
+  'Art Sprint': ['🎨', '🖌️', '🎭', '🧶', '🧵', '🪡', '🎞️', '📸', '🖍️', '🩰', '🎤', '🧩'],
+  'Study Sprint': ['🤓', '🧑‍🎓', '💡', '🧠', '🧑‍🏫', '🧑‍💻', '💼', '🔍', '🎓', '🎒', '🏫', '💻', '🔬', '📊', '📋', '📑']
 };
+
+function getSprintEmojis(sprintType) {
+  const readingSprintTypes = ['Tall Tomes Sprint', 'Short Stacks Sprint', 'Readathon Sprint'];
+  
+  if (readingSprintTypes.includes(sprintType)) {
+    const monthName = new Date().toLocaleString('default', { month: 'long' });
+    return sprintEmojis.reading[monthName];
+  }
+  
+  return sprintEmojis[sprintType];
+}
 
 const sprintVerbs = {
   'Tall Tomes Sprint': 'read',
@@ -527,7 +552,7 @@ async function checkForNewQuizSubmissions() {
 
 // ---- SPRINT HELPERS ----
 function randomEmoji(type) {
-  const pool = sprintEmojis[type];
+  const pool = getSprintEmojis(type);
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
