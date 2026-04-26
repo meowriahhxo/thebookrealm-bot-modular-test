@@ -671,7 +671,7 @@ async function postLeaderboard(channelId, guild) {
   try {
     await leaderboardMessage.react('🤖');
     const sprintLabel = sprint.sprintNumber ? `Readathon Sprint #${sprint.sprintNumber}` : sprint.type;
-    const endedAt = new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' });
+    const endedAt = `<t:${Math.floor(Date.now() / 1000)}:t>`;
     const messageLink = `https://discord.com/channels/${process.env.GUILD_ID}/${channelId}/${leaderboardMessage.id}`;
     const threadId = sprintSpamThreads[sprint.type];
     if (threadId) {
