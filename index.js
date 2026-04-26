@@ -639,7 +639,7 @@ async function postLeaderboard(channelId, guild) {
   }
 
   leaderboard += `\nMinutes Read: **${totalTime} minutes** in a **${sprint.duration} minute** sprint!\n`;
-  leaderboard += `\nThanks for joining us. You can use the \`/sprint\` command to start another sprint!\n\n`;
+  leaderboard += `\nThanks for joining us. You can use the \`/sprint\` command to start another sprint!\n\n-# If your minutes total is not correct on the leaderboard, please tag the Keepers of the Realm role to have it adjusted!\n\n`;
 
   const leaderboardMessage = await channel.send(leaderboard);
 
@@ -659,12 +659,24 @@ async function postLeaderboard(channelId, guild) {
   }
 
   if (writeSuccess) {
-    try {
-      await leaderboardMessage.react('🤖');
-    } catch (error) {
-      console.error('Error reacting to leaderboard message:', error);
+  try {
+    await leaderboardMessage.react('🤖');
+    const sprintLabel = sprint.sprintNumber ? `Readathon Sprint #${sprint.sprintNumber}` : sprint.type;
+    const endedAt = new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit' });
+    const messageLink = `https://discord.com/channels/${sprint.guildId}/${channelId}/${leaderboardMessage.id}`;
+    const threadId = sprintSpamThreads[sprint.type];
+    if (threadId) {
+      const thread = await client.channels.fetch(threadId);
+      const isReadingSprint = ['Tall Tomes Sprint', 'Short Stacks Sprint', 'Readathon Sprint'].includes(sprint.type);
+      const spamMessage = isReadingSprint
+        ? `Updated leaderboard for **${sprintLabel}** ended at ${endedAt} — [View Leaderboard](${messageLink})`
+        : `Updated points for **${sprintLabel}** ended at ${endedAt} — [View Leaderboard](${messageLink})`;
+      await thread.send(spamMessage);
     }
+  } catch (error) {
+    console.error('Error posting to spam thread:', error);
   }
+}
 
   await deleteActiveSprint(channelId);
   delete activeSprints[channelId];
