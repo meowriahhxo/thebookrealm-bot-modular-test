@@ -1404,7 +1404,6 @@ if (interaction.isButton()) {
         await interaction.update({ content: 'No sprint to cancel!', components: [] });
         return;
       }
-      const roleId = sprintRoles[sprint.type];
       clearTimeout(sprint.timer);
       clearTimeout(sprint.pendingTimer);
       clearTimeout(sprint.warningTimer);
@@ -1414,8 +1413,8 @@ if (interaction.isButton()) {
       await deletePendingSprint(channelId);
       delete activeSprints[channelId];
       delete pendingSprints[channelId];
-      await interaction.update({ content: `The **${sprint.type}** has been cancelled.`, components: [] });
-      await interaction.channel.send(`<@&${roleId}>`);
+      const mentions = sprint.participants.map(id => `<@${id}>`).join(', ');
+      await interaction.update({ content: `The **${sprint.type}** has been cancelled.${mentions ? ` ${mentions}` : ''}`, components: [] });
     }
 
     if (interaction.customId === 'deny_cancel') {
@@ -2010,9 +2009,7 @@ if (interaction.commandName === 'scheduled') {
       delete activeSprints[channelId];
       delete pendingSprints[channelId];
 
-      const roleId = sprintRoles[sprint.type];
       await interaction.reply(`The **${sprint.type}** has been cancelled.`);
-      await interaction.channel.send(`<@&${roleId}>`);
     }
   }
 
