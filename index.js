@@ -1344,8 +1344,8 @@ client.once('clientReady', async () => {
     checkForNewQuizSubmissions();
   });
 
-  // 8AM EST = 13:00 UTC
-cron.schedule('0 13 * * *', async () => {
+  // 8AM EST = 12:00 UTC
+cron.schedule('0 12 * * *', async () => {
   console.log('Posting common room messages...');
   for (const house of COMMON_ROOM_HOUSES) {
     try {
@@ -1365,8 +1365,8 @@ cron.schedule('0 13 * * *', async () => {
   }
 });
 
-// 5PM EST = 22:00 UTC
-cron.schedule('0 22 * * *', async () => {
+// 5PM EST = 21:00 UTC
+cron.schedule('0 21 * * *', async () => {
   console.log('Removing common room reactions...');
   for (const house of COMMON_ROOM_HOUSES) {
     try {
