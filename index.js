@@ -1357,7 +1357,7 @@ cron.schedule('0 13 * * *', async () => {
 
       for (const emoji of COMMON_ROOM_EMOJIS) {
         await message.react(emoji);
-        await new Promise(res => setTimeout(res, 300));
+        await new Promise(res => setTimeout(res, 500));
       }
     } catch (err) {
       console.error(`Failed to post common room message for ${house.name}:`, err);
@@ -1382,9 +1382,10 @@ cron.schedule('0 22 * * *', async () => {
         const reaction = message.reactions.cache.get(emoji);
         if (reaction) {
           await reaction.users.remove(client.user.id);
-          await new Promise(res => setTimeout(res, 300));
+          await new Promise(res => setTimeout(res, 500));
         }
       }
+      await new Promise(res => setTimeout(res, 2000));
     } catch (err) {
       console.error(`Failed to remove reactions for ${house.name}:`, err);
     }
@@ -2054,11 +2055,13 @@ if (interaction.commandName === 'scheduled') {
     }
 
     if (pendingSprints[channelId]) {
-      const sprint = pendingSprints[channelId];
-      const startsAt = Math.floor(sprint.startsAt / 1000);
-      await interaction.reply({ content: `Readathon Sprint #${sprint.sprintNumber} is starting <t:${startsAt}:R>! Use \`/join\` to join!`, flags: 64 });
-      return;
-    }
+  const sprint = pendingSprints[channelId];
+  const startsAt = Math.floor(sprint.startsAt / 1000);
+  const label = sprint.sprintNumber ? `Readathon Sprint #${sprint.sprintNumber}` : sprint.type;
+  await interaction.reply({ content: `**${label}** is starting <t:${startsAt}:R>! Use \`/join\` to join!`, flags: 64 });
+  return;
+}
+
 
     if (scheduledSprints[channelId] && scheduledSprints[channelId].length > 0) {
       const next = scheduledSprints[channelId][0];
