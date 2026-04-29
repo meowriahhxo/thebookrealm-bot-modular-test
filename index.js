@@ -2153,7 +2153,7 @@ if (interaction.commandName === 'scheduled') {
   }
 });
 
-// ---- MESSAGE CREATE ----
+// ---- MESSAGE CREATE -----
 client.on('messageCreate', async message => {
   if (message.author.bot) return;
 
