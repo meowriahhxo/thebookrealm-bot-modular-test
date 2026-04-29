@@ -730,7 +730,7 @@ async function postLeaderboard(channelId, guild) {
 
   if (writeSuccess) {
   try {
-    await leaderboardMessage.react('🤖');
+    await leaderboardMessage.react('<:i_got:1490375689118158848>');
     const sprintLabel = sprint.sprintNumber ? `Readathon Sprint #${sprint.sprintNumber}` : sprint.type;
     const endedAt = `<t:${Math.floor(Date.now() / 1000)}:t>`;
     const messageLink = `https://discord.com/channels/${process.env.GUILD_ID}/${channelId}/${leaderboardMessage.id}`;
@@ -2207,6 +2207,7 @@ client.on('messageCreate', async message => {
             await postSprintStart(channelId);
           }, startsIn * 60 * 1000)
         };
+        await savePendingSprint(channelId, pendingSprints[channelId]);
       }
 
       if (command === 'join') {
