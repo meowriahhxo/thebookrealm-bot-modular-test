@@ -627,8 +627,8 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
       const submitWindow = minutes <= 30 ? 5 : 7;
       const finalDeadline = Math.floor((Date.now() + submitWindow * 60 * 1000) / 1000);
       const mentions = sprint.originalParticipants.size > 0
-        ? [...sprint.originalParticipants].map(id => `<@${id}>`).join(', ')
-        : null;
+      ? [...sprint.originalParticipants].filter(id => !sprint.submittedUsers.has(id)).map(id => `<@${id}>`).join(', ')
+       : null;
       const endEmoji = randomEmoji(type);
 
       const participantText = mentions ? `\n\n✨ **Participants:**\n${mentions}` : '\n\n✨ **Participants:**';
@@ -1160,8 +1160,8 @@ async function restoreSprintState() {
           const submitWindow = sprint.duration <= 30 ? 5 : 7;
           const finalDeadline = Math.floor((Date.now() + submitWindow * 60 * 1000) / 1000);
           const mentions = sprint.originalParticipants.size > 0
-            ? [...sprint.originalParticipants].map(id => `<@${id}>`).join(', ')
-            : null;
+          ? [...sprint.originalParticipants].filter(id => !sprint.submittedUsers.has(id)).map(id => `<@${id}>`).join(', ')
+          : null;
           const endEmoji = randomEmoji(sprint.type);
           const sprintLabel = sprint.sprintNumber ? `Readathon Sprint #${sprint.sprintNumber}` : sprint.type;
           const participantText = mentions ? `\n\n✨ **Participants:**\n${mentions}` : '\n\n✨ **Participants:**';
