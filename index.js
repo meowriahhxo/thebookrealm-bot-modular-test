@@ -226,6 +226,14 @@ await pool.query(`
     participants TEXT[] DEFAULT '{}'
   )
 `);
+
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS common_room_messages (
+    channel_id TEXT PRIMARY KEY,
+    message_id TEXT NOT NULL
+  )
+`);
+
     console.log('Database initialized!');
   } catch (error) {
     console.error('Database initialization error:', error);
@@ -331,6 +339,19 @@ async function deletePendingSprint(channelId) {
 
 async function deleteScheduledSprint(channelId, sprintNumber) {
   await pool.query('DELETE FROM scheduled_sprints WHERE channel_id = $1 AND sprint_number = $2', [channelId, sprintNumber]);
+}
+
+async function saveCommonRoomMessage(channelId, messageId) {
+  await pool.query(`
+    INSERT INTO common_room_messages (channel_id, message_id)
+    VALUES ($1, $2)
+    ON CONFLICT (channel_id) DO UPDATE SET message_id = $2
+  `, [channelId, messageId]);
+}
+
+async function getCommonRoomMessages() {
+  const result = await pool.query('SELECT * FROM common_room_messages');
+  return result.rows;
 }
 
 // ---- GOOGLE AUTH ----
@@ -1336,6 +1357,12 @@ client.once('clientReady', async () => {
   await registerCommands();
   await restoreSprintState();
 
+  const storedMessages = await getCommonRoomMessages();
+for (const row of storedMessages) {
+  commonRoomMessageIds[row.channel_id] = row.message_id;
+}
+console.log('Common room message IDs restored!');
+
   cron.schedule('*/30 * * * *', () => {
     postHouseLeaderboard();
   });
@@ -1354,6 +1381,7 @@ cron.schedule('0 12 * * *', async () => {
         `<@&${house.roleId}> Hello, House ${house.name}! Have you done these?\n**Please react to this message in order of the emojis shown!**\n*-# (If you haven't done them yet, but you know you will, you can still react)*\n\n__**Morning Tasks**__\n🪥 | Brushed your teeth?\n🛏️ | Made your bed?\n👑 | Styled your hair?\n💊 | Took medication?\n👕 | Got dressed?\n\n__**Evening Tasks**__\n🦷 | Brushed your teeth?\n⚕️ | Took additional medication?\n🚿 | Had a wash today? - includes washing hands, face etc.\n🥛 | Had a drink today?\n🍕 | Had a meal today?\n📖 | Read your book?\n\n**Also make sure to Check In!**\n${CHECKIN_EMOJI} | Check in\n\nRemember, we love you all and hope you have a wonderful day!\n♥️`
       );
       commonRoomMessageIds[house.channelId] = message.id;
+      await saveCommonRoomMessage(house.channelId, message.id);
 
       for (const emoji of COMMON_ROOM_EMOJIS) {
         await message.react(emoji);
