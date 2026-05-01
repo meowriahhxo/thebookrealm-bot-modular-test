@@ -685,7 +685,7 @@ async function processSelfCarePoints(targetDate) {
           return `${task.name} - ${taskPoints}`;
         });
 
-        await thread.send(`**${house.name} ${formattedDate} Self-Care**\n\n${lines.join('\n')}`);
+        await thread.send(`**${houseEmojis[house.name]} ${house.name} ${formattedDate} Self-Care**\n${lines.join('\n')}`);
         console.log(`Successfully posted self-care summary for ${house.name}.`);
       }
     } catch (err) {
