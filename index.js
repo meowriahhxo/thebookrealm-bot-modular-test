@@ -1685,6 +1685,14 @@ async function registerCommands() {
   .setName('scheduled')
   .setDescription('View all upcoming scheduled sprints')
   .toJSON(),
+  new SlashCommandBuilder()
+  .setName('runselfcare')
+  .setDescription('Manually run self-care points for a specific date')
+  .addStringOption(opt =>
+    opt.setName('date')
+      .setDescription('Date in YYYY-MM-DD format (e.g. 2026-04-30)')
+      .setRequired(true))
+  .toJSON(),
   ];
 
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
@@ -1732,7 +1740,7 @@ console.log('Common room message IDs restored!');
   // Collects that same day's self-care points before the month rolls over in Sheets
   cron.schedule('0 4 * * *', async () => {
     const easternTime = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
-    const lastDayOfMonth = new Date(easternTime.getFullYear(), easternTime.getMonth(), 0).getDate();
+    const lastDayOfMonth = new Date(easternTime.getFullYear(), easternTime.getMonth() + 1, 0).getDate();
     if (easternTime.getDate() !== lastDayOfMonth) return;
     const targetDate = easternTime.toISOString().split('T')[0];
     await processSelfCarePoints(targetDate);
@@ -2117,6 +2125,19 @@ if (interaction.commandName === 'scheduled') {
   } catch (error) {
     console.error('Error handling scheduled command:', error);
   }
+}
+
+// ---- /runselfcare ----
+if (interaction.commandName === 'runselfcare') {
+  const member = await interaction.guild.members.fetch(interaction.user.id);
+  const isMod = member.roles.cache.has(process.env.MOD_ROLE_ID);
+  if (!isMod) {
+    await interaction.reply({ content: 'You do not have permission to use this command.', flags: 64 });
+    return;
+  }
+  const date = interaction.options.getString('date');
+  await interaction.reply({ content: `Running self-care points for ${date}...`, flags: 64 });
+  await processSelfCarePoints(date);
 }
 
   // ---- /stick ----
