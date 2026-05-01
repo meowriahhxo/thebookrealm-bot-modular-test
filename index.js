@@ -134,7 +134,7 @@ const sprintSpamThreads = {
 
 //-----MORNING MESSAGE CONSTANTS----
 // 🔄 CHANGE THIS EACH MONTH
-const CHECKIN_EMOJI = '🐰';
+const CHECKIN_EMOJI = '🐝';
 
 const COMMON_ROOM_EMOJIS = [
   '🪥', '🛏️', '👑', '💊', '👕',
