@@ -2458,7 +2458,14 @@ if (interaction.commandName === 'runselfcare') {
     } else if (pendingSprints[channelId]) {
       await savePendingSprint(channelId, pendingSprints[channelId]);
     }
-    await interaction.reply(`<@${interaction.user.id}> has joined the **${sprint.type}**!`);
+    // Calculate minutes remaining — if sprint hasn't started yet, use full duration
+let minutesRemaining;
+if (activeSprints[channelId]) {
+  minutesRemaining = Math.ceil((sprint.endTime - Date.now()) / 60000);
+} else {
+  minutesRemaining = sprint.duration;
+}
+  await interaction.reply(`<@${interaction.user.id}> has joined the **${sprint.type}** with **${minutesRemaining} minutes** remaining!`);
   }
 
   // ---- /time ----
@@ -2647,7 +2654,15 @@ client.on('messageCreate', async message => {
         if (activeSprints[channelId]) {
           sprint.originalParticipants.add(message.author.id);
         }
-        await message.reply(`<@${message.author.id}> has joined the **${sprint.type}**!`);
+        // Calculate minutes remaining — if sprint hasn't started yet, use full duration
+let minutesRemaining;
+if (activeSprints[channelId]) {
+  minutesRemaining = Math.ceil((sprint.endTime - Date.now()) / 60000);
+} else {
+  minutesRemaining = sprint.duration;
+}
+
+await message.reply(`<@${message.author.id}> has joined the **${sprint.type}** with **${minutesRemaining} minutes** remaining!`);
       }
 
       if (command === 'final') {
