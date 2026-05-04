@@ -325,8 +325,8 @@ async function deleteStickyMessage(channelId) {
 
 async function saveSprintResult(userId, guildId, sprintType, minutes) {
   await pool.query(
-    `INSERT INTO sprint_results (user_id, guild_id, sprint_type, minutes, sprint_date)
-     VALUES ($1, $2, $3, $4, CURRENT_DATE)`,
+    `INSERT INTO sprint_results (user_id, guild_id, sprint_type, minutes, sprint_date, sprint_ended_at)
+     VALUES ($1, $2, $3, $4, CURRENT_DATE, NOW())`,
     [userId, guildId, sprintType, minutes]
   );
 }
