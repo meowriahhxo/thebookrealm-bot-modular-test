@@ -1308,6 +1308,7 @@ async function writeSprintToSheets(sprintResults, guild, sprintType, sprintNumbe
       const response = await sheets.spreadsheets.values.get({
         spreadsheetId: process.env.SPRINT_LEADERBOARD_ID,
         range: `${targetTab}!A:E`,
+        valueRenderOption: 'UNFORMATTED_VALUE'
       });
 
       const rows = response.data.values || [];
@@ -1345,7 +1346,7 @@ async function writeSprintToSheets(sprintResults, guild, sprintType, sprintNumbe
         const existingRowIndex = rows.findIndex(row => row[0] === userId);
 
         if (existingRowIndex !== -1) {
-          const currentMinutes = parseFloat(rows[existingRowIndex][3]) || 0;
+          const currentMinutes = parseInt(rows[existingRowIndex][3]) || 0;
           const currentSprints = parseInt(rows[existingRowIndex][4]) || 0;
           const rowNumber = existingRowIndex + 1;
 
