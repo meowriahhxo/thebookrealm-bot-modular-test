@@ -1828,30 +1828,34 @@ if (interaction.isButton()) {
     }
 
     if (interaction.customId.startsWith('confirm_final_')) {
-      const parts = interaction.customId.split('_');
-      const minutes = parseInt(parts[2]);
-      const userId = parts[3];
+      try {
+        const parts = interaction.customId.split('_');
+        const minutes = parseInt(parts[2]);
+        const userId = parts[3];
 
-      const sprint = activeSprints[channelId];
-      if (!sprint) {
-        await interaction.update({ content: 'That sprint has already ended!', components: [] });
-        return;
-      }
+        const sprint = activeSprints[channelId];
+        if (!sprint) {
+          await interaction.update({ content: 'That sprint has already ended!', components: [] });
+          return;
+        }
 
-      sprint.finalTimes[userId] = minutes;
-      sprint.submittedUsers.add(userId);
-      sprint.originalParticipants.add(userId);
-      sprint.participants = sprint.participants.filter(id => id !== userId);
-      await saveActiveSprint(channelId, { ...sprint, guildId: interaction.guild.id });
+        sprint.finalTimes[userId] = minutes;
+        sprint.submittedUsers.add(userId);
+        sprint.originalParticipants.add(userId);
+        sprint.participants = sprint.participants.filter(id => id !== userId);
+        await saveActiveSprint(channelId, { ...sprint, guildId: interaction.guild.id });
 
-      await interaction.update({ content: `Got it! Your **${minutes} minutes** have been logged.`, components: [] });
-      const sprintVerb = activeSprints[channelId] ? sprintVerbs[activeSprints[channelId].type] : 'read';
-      await interaction.channel.send(`<@${userId}> has ${sprintVerb} for **${minutes} minutes**!`);
+        await interaction.update({ content: `Got it! Your **${minutes} minutes** have been logged.`, components: [] });
+        const sprintVerb = activeSprints[channelId] ? sprintVerbs[activeSprints[channelId].type] : 'read';
+        await interaction.channel.send(`<@${userId}> has ${sprintVerb} for **${minutes} minutes**!`);
 
-      const sprintEnded = Date.now() >= sprint.endTime;
-      const allSubmitted = [...sprint.originalParticipants].every(id => sprint.submittedUsers.has(id));
-      if (sprintEnded && allSubmitted && Object.keys(sprint.finalTimes).length > 0) {
-        await postLeaderboard(channelId, interaction.guild);
+        const sprintEnded = Date.now() >= sprint.endTime;
+        const allSubmitted = [...sprint.originalParticipants].every(id => sprint.submittedUsers.has(id));
+        if (sprintEnded && allSubmitted && Object.keys(sprint.finalTimes).length > 0) {
+          await postLeaderboard(channelId, interaction.guild);
+        }
+      } catch (error) {
+        console.error('Error handling confirm_final button:', error);
       }
     }
 
@@ -1860,21 +1864,25 @@ if (interaction.isButton()) {
     }
 
     if (interaction.customId === 'confirm_leave') {
-      const sprint = activeSprints[channelId] || pendingSprints[channelId];
-      if (!sprint) {
-        await interaction.update({ content: 'That sprint has already ended!', components: [] });
-        return;
+      try {
+        const sprint = activeSprints[channelId] || pendingSprints[channelId];
+        if (!sprint) {
+          await interaction.update({ content: 'That sprint has already ended!', components: [] });
+          return;
+        }
+        const userId = interaction.user.id;
+        sprint.participants = sprint.participants.filter(id => id !== userId);
+        sprint.originalParticipants.delete(userId);
+        if (activeSprints[channelId]) {
+          await saveActiveSprint(channelId, { ...activeSprints[channelId], guildId: interaction.guild.id });
+        } else if (pendingSprints[channelId]) {
+          await deletePendingSprint(channelId);
+        }
+        await interaction.update({ content: `You've been removed from the sprint. See you next time!`, components: [] });
+        await interaction.channel.send(`<@${userId}> has left the **${sprint.type}**.`);
+      } catch (error) {
+        console.error('Error handling confirm_leave button:', error);
       }
-      const userId = interaction.user.id;
-      sprint.participants = sprint.participants.filter(id => id !== userId);
-      sprint.originalParticipants.delete(userId);
-      if (activeSprints[channelId]) {
-        await saveActiveSprint(channelId, { ...activeSprints[channelId], guildId: interaction.guild.id });
-      } else if (pendingSprints[channelId]) {
-        await deletePendingSprint(channelId);
-      }
-      await interaction.update({ content: `You've been removed from the sprint. See you next time!`, components: [] });
-      await interaction.channel.send(`<@${userId}> has left the **${sprint.type}**.`);
     }
 
     if (interaction.customId === 'deny_leave') {
@@ -2432,40 +2440,46 @@ if (interaction.commandName === 'runselfcare') {
 
   // ---- /join ----
   if (interaction.commandName === 'join') {
-    const sprint = activeSprints[channelId] || pendingSprints[channelId];
-    if (!sprint) {
-      await interaction.reply({ content: `There isn't a sprint running in this channel right now. Feel free to start one using the \`/sprint\` command!`, flags: 64 });
-      return;
-    }
-
-    if (activeSprints[channelId]) {
-      const timeRemaining = (sprint.endTime - Date.now()) / 60000;
-      if (timeRemaining < 5) {
-        await interaction.reply({ content: `Less than 5 minutes are remaining, join us for the next one!`, flags: 64 });
+    try {
+      const sprint = activeSprints[channelId] || pendingSprints[channelId];
+      if (!sprint) {
+        await interaction.reply({ content: `There isn't a sprint running in this channel right now. Feel free to start one using the \`/sprint\` command!`, flags: 64 });
         return;
       }
-    }
 
-    if (sprint.participants.includes(interaction.user.id)) {
-      await interaction.reply({ content: `You have already joined this sprint. Need to leave early? Use the \`/final\` command.`, flags: 64 });
-      return;
-    }
+      if (activeSprints[channelId]) {
+        const timeRemaining = (sprint.endTime - Date.now()) / 60000;
+        if (timeRemaining < 5) {
+          await interaction.reply({ content: `Less than 5 minutes are remaining, join us for the next one!`, flags: 64 });
+          return;
+        }
+      }
 
-    sprint.participants.push(interaction.user.id);
-    if (activeSprints[channelId]) {
-      sprint.originalParticipants.add(interaction.user.id);
-      await saveActiveSprint(channelId, { ...activeSprints[channelId], guildId: interaction.guild.id });
-    } else if (pendingSprints[channelId]) {
-      await savePendingSprint(channelId, pendingSprints[channelId]);
+      if (sprint.participants.includes(interaction.user.id)) {
+        await interaction.reply({ content: `You have already joined this sprint. Need to leave early? Use the \`/final\` command.`, flags: 64 });
+        return;
+      }
+
+      sprint.participants.push(interaction.user.id);
+      if (activeSprints[channelId]) {
+        sprint.originalParticipants.add(interaction.user.id);
+        await saveActiveSprint(channelId, { ...activeSprints[channelId], guildId: interaction.guild.id });
+      } else if (pendingSprints[channelId]) {
+        await savePendingSprint(channelId, pendingSprints[channelId]);
+      }
+
+      // Calculate minutes remaining — if sprint hasn't started yet, use full duration
+      let minutesRemaining;
+      if (activeSprints[channelId]) {
+        minutesRemaining = Math.ceil((sprint.endTime - Date.now()) / 60000);
+      } else {
+        minutesRemaining = sprint.duration;
+      }
+
+      await interaction.reply(`<@${interaction.user.id}> has joined the **${sprint.type}** with **${minutesRemaining} minutes** remaining!`);
+    } catch (error) {
+      console.error('Error handling join command:', error);
     }
-    // Calculate minutes remaining — if sprint hasn't started yet, use full duration
-let minutesRemaining;
-if (activeSprints[channelId]) {
-  minutesRemaining = Math.ceil((sprint.endTime - Date.now()) / 60000);
-} else {
-  minutesRemaining = sprint.duration;
-}
-  await interaction.reply(`<@${interaction.user.id}> has joined the **${sprint.type}** with **${minutesRemaining} minutes** remaining!`);
   }
 
   // ---- /time ----
@@ -2498,49 +2512,53 @@ if (activeSprints[channelId]) {
 
   // ---- /final ----
   if (interaction.commandName === 'final') {
-    const minutes = interaction.options.getInteger('minutes');
+    try {
+      const minutes = interaction.options.getInteger('minutes');
 
-    if (!activeSprints[channelId]) {
-      await interaction.reply({ content: `There isn't an active sprint in this channel right now.`, flags: 64 });
-      return;
-    }
+      if (!activeSprints[channelId]) {
+        await interaction.reply({ content: `There isn't an active sprint in this channel right now.`, flags: 64 });
+        return;
+      }
 
-    const sprint = activeSprints[channelId];
-    const verb = sprintVerbs[sprint.type];
-    const wasParticipant = sprint.originalParticipants.has(interaction.user.id) || sprint.participants.includes(interaction.user.id);
+      const sprint = activeSprints[channelId];
+      const verb = sprintVerbs[sprint.type];
+      const wasParticipant = sprint.originalParticipants.has(interaction.user.id) || sprint.participants.includes(interaction.user.id);
 
-    if (!wasParticipant) {
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`confirm_final_${minutes}_${interaction.user.id}`)
-          .setLabel(`Yes, I ${verb} for ${minutes} minutes`)
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId('deny_final')
-          .setLabel('No, cancel submit')
-          .setStyle(ButtonStyle.Secondary)
-      );
+      if (!wasParticipant) {
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`confirm_final_${minutes}_${interaction.user.id}`)
+            .setLabel(`Yes, I ${verb} for ${minutes} minutes`)
+            .setStyle(ButtonStyle.Success),
+          new ButtonBuilder()
+            .setCustomId('deny_final')
+            .setLabel('No, cancel submit')
+            .setStyle(ButtonStyle.Secondary)
+        );
 
-      await interaction.reply({
-        content: `You didn't officially join this sprint, are you sure you want to submit **${minutes} minutes**? Please be honest and only submit the amount of time you actually ${verb}!`,
-        components: [row],
-        flags: 64
-      });
-      return;
-    }
+        await interaction.reply({
+          content: `You didn't officially join this sprint, are you sure you want to submit **${minutes} minutes**? Please be honest and only submit the amount of time you actually ${verb}!`,
+          components: [row],
+          flags: 64
+        });
+        return;
+      }
 
-    sprint.finalTimes[interaction.user.id] = minutes;
-    sprint.submittedUsers.add(interaction.user.id);
-    sprint.originalParticipants.add(interaction.user.id);
-    sprint.participants = sprint.participants.filter(id => id !== interaction.user.id);
-    await saveActiveSprint(channelId, { ...sprint, guildId: interaction.guild.id });
+      sprint.finalTimes[interaction.user.id] = minutes;
+      sprint.submittedUsers.add(interaction.user.id);
+      sprint.originalParticipants.add(interaction.user.id);
+      sprint.participants = sprint.participants.filter(id => id !== interaction.user.id);
+      await saveActiveSprint(channelId, { ...sprint, guildId: interaction.guild.id });
 
-    await interaction.reply(`<@${interaction.user.id}> has ${verb} for **${minutes} minutes**!`);
+      await interaction.reply(`<@${interaction.user.id}> has ${verb} for **${minutes} minutes**!`);
 
-    const sprintEnded = Date.now() >= sprint.endTime;
-    const allSubmitted = [...sprint.originalParticipants].every(id => sprint.submittedUsers.has(id));
-    if (sprintEnded && allSubmitted && Object.keys(sprint.finalTimes).length > 0) {
-      await postLeaderboard(channelId, interaction.guild);
+      const sprintEnded = Date.now() >= sprint.endTime;
+      const allSubmitted = [...sprint.originalParticipants].every(id => sprint.submittedUsers.has(id));
+      if (sprintEnded && allSubmitted && Object.keys(sprint.finalTimes).length > 0) {
+        await postLeaderboard(channelId, interaction.guild);
+      }
+    } catch (error) {
+      console.error('Error handling final command:', error);
     }
   }
 
