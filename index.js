@@ -15,6 +15,21 @@ const client = new Client({
   ]
 });
 
+// ---- GLOBAL ERROR HANDLERS ----
+// These catch any error anywhere in the bot that wasn't caught by a try/catch
+// Instead of crashing the bot, they just log the error and keep going
+process.on('unhandledRejection', (error) => {
+  console.error('Unhandled promise rejection:', error);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught exception:', error);
+});
+
+client.on('error', (error) => {
+  console.error('Discord client error:', error);
+});
+
 // ---- HOUSE CONSTANTS ----
 const HOUSES = [
   { name: "House Asphodel", row: 43, col: 2, color: 0x92374e },
