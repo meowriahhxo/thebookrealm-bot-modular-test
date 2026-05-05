@@ -1074,6 +1074,7 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
       if (allAlreadySubmitted && Object.keys(sprint.finalTimes).length > 0) {
         await postLeaderboard(channelId, guild);
       } else {
+        sprint.leaderboardAt = Date.now() + submitWindow * 60 * 1000;
         sprint.finalTimer = setTimeout(() => postLeaderboard(channelId, guild), submitWindow * 60 * 1000);
       }
     }, minutes * 60 * 1000)
@@ -1620,6 +1621,7 @@ async function restoreSprintState() {
           if (allAlreadySubmitted && Object.keys(sprint.finalTimes).length > 0) {
             await postLeaderboard(row.channel_id, guild);
           } else {
+            sprint.leaderboardAt = Date.now() + submitWindow * 60 * 1000;
             sprint.finalTimer = setTimeout(() => postLeaderboard(row.channel_id, guild), submitWindow * 60 * 1000);
           }
         }, msRemaining)
