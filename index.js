@@ -309,6 +309,20 @@ await pool.query(`
   )
 `);
 
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS ending_sprints (
+    channel_id TEXT PRIMARY KEY,
+    guild_id TEXT NOT NULL,
+    type TEXT NOT NULL,
+    duration INTEGER NOT NULL,
+    sprint_number INTEGER,
+    original_participants TEXT[] DEFAULT '{}',
+    final_times JSONB DEFAULT '{}',
+    submitted_users TEXT[] DEFAULT '{}',
+    leaderboard_at BIGINT NOT NULL
+  )
+`);
+
     console.log('Database initialized!');
   } catch (error) {
     console.error('Database initialization error:', error);
@@ -414,6 +428,30 @@ async function deletePendingSprint(channelId) {
 
 async function deleteScheduledSprint(channelId, sprintNumber) {
   await pool.query('DELETE FROM scheduled_sprints WHERE channel_id = $1 AND sprint_number = $2', [channelId, sprintNumber]);
+}
+
+async function saveEndingSprint(channelId, sprint) {
+  await pool.query(`
+    INSERT INTO ending_sprints (channel_id, guild_id, type, duration, sprint_number, original_participants, final_times, submitted_users, leaderboard_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    ON CONFLICT (channel_id) DO UPDATE SET
+      guild_id = $2, type = $3, duration = $4, sprint_number = $5,
+      original_participants = $6, final_times = $7, submitted_users = $8, leaderboard_at = $9
+  `, [
+    channelId,
+    sprint.guildId,
+    sprint.type,
+    sprint.duration,
+    sprint.sprintNumber || null,
+    [...(sprint.originalParticipants || [])],
+    JSON.stringify(sprint.finalTimes || {}),
+    [...(sprint.submittedUsers || [])],
+    sprint.leaderboardAt
+  ]);
+}
+
+async function deleteEndingSprint(channelId) {
+  await pool.query('DELETE FROM ending_sprints WHERE channel_id = $1', [channelId]);
 }
 
 async function saveCommonRoomMessage(channelId, messageId) {
@@ -1013,6 +1051,17 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
       const participantText = mentions ? `\n\n✨ **Participants:**\n${mentions}` : '\n\n✨ **Participants:**';
       await channel.send(`${endEmoji} **THE SPRINT IS OVER** ${endEmoji}\n\nThis **${sprintLabel}** is over, please put in the amount of time you ${verb}. The leaderboard will post <t:${finalDeadline}:R>, you have until then to put in your final count!${participantText}`);
 
+      await saveEndingSprint(channelId, {
+        guildId: guild.id,
+        type: sprint.type,
+        duration: sprint.duration,
+        sprintNumber: sprint.sprintNumber,
+        originalParticipants: sprint.originalParticipants,
+        finalTimes: sprint.finalTimes,
+        submittedUsers: sprint.submittedUsers,
+        leaderboardAt: Date.now() + submitWindow * 60 * 1000
+      });
+      
       sprint.reminderTimer = setTimeout(async () => {
         const unsubmitted = [...sprint.originalParticipants].filter(id => !sprint.submittedUsers.has(id));
         if (unsubmitted.length > 0) {
@@ -1090,11 +1139,12 @@ async function postLeaderboard(channelId, guild) {
   leaderboard += `\nMinutes Read: **${totalTime} minutes** in a **${sprint.duration} minute** sprint!\n`;
   leaderboard += `\nThanks for joining us. You can use the \`/sprint\` command to start another sprint!\n\n-# If your minutes total is not correct on the leaderboard or if the bot has **not** reacted to this post (please give it 2 minutes to process the data), please tag the Keepers of the Realm role to have it adjusted!\n\n`;
 
-  const leaderboardMessage = await channel.send(leaderboard);
+const leaderboardMessage = await channel.send(leaderboard);
 
   clearTimeout(sprint.timer);
   clearTimeout(sprint.finalTimer);
   clearTimeout(sprint.reminderTimer);
+  await deleteEndingSprint(channelId);
   const writeSuccess = await writeSprintToSheets(sprint.finalTimes, guild, sprint.type, sprint.sprintNumber);
 
   if (sprint.type === 'Tall Tomes Sprint' || sprint.type === 'Short Stacks Sprint' || sprint.type === 'Readathon Sprint') {
@@ -1547,6 +1597,17 @@ async function restoreSprintState() {
           const participantText = mentions ? `\n\n✨ **Participants:**\n${mentions}` : '\n\n✨ **Participants:**';
           await channel.send(`${endEmoji} **THE SPRINT IS OVER** ${endEmoji}\n\nThis **${sprintLabel}** is over, please put in the amount of time you ${verb}. The leaderboard will post <t:${finalDeadline}:R>, you have until then to put in your final count!${participantText}`);
 
+        await saveEndingSprint(row.channel_id, {
+            guildId: sprint.guildId,
+            type: sprint.type,
+            duration: sprint.duration,
+            sprintNumber: sprint.sprintNumber,
+            originalParticipants: sprint.originalParticipants,
+            finalTimes: sprint.finalTimes,
+            submittedUsers: sprint.submittedUsers,
+            leaderboardAt: Date.now() + submitWindow * 60 * 1000
+          });
+
           sprint.reminderTimer = setTimeout(async () => {
             const unsubmitted = [...sprint.originalParticipants].filter(id => !sprint.submittedUsers.has(id));
             if (unsubmitted.length > 0) {
@@ -1565,6 +1626,48 @@ async function restoreSprintState() {
       };
 
       console.log(`Restored active ${row.type} in channel ${row.channel_id} with ${msRemaining}ms remaining`);
+    }
+
+    // Restore ending sprints
+    const endingResult = await pool.query('SELECT * FROM ending_sprints');
+    for (const row of endingResult.rows) {
+      const msUntilLeaderboard = row.leaderboard_at - Date.now();
+
+      // If the leaderboard time has already passed, post it now
+      if (msUntilLeaderboard <= 0) {
+        if (Object.keys(row.final_times).length > 0) {
+          activeSprints[row.channel_id] = {
+            type: row.type,
+            duration: row.duration,
+            originalParticipants: new Set(row.original_participants || []),
+            finalTimes: row.final_times || {},
+            submittedUsers: new Set(row.submitted_users || []),
+            sprintNumber: row.sprint_number,
+            guildId: row.guild_id,
+            endTime: 0
+          };
+          await postLeaderboard(row.channel_id, guild);
+        } else {
+          await deleteEndingSprint(row.channel_id);
+        }
+        continue;
+      }
+
+      // Otherwise restore the sprint and set a timer to post the leaderboard
+      activeSprints[row.channel_id] = {
+        type: row.type,
+        duration: row.duration,
+        originalParticipants: new Set(row.original_participants || []),
+        finalTimes: row.final_times || {},
+        submittedUsers: new Set(row.submitted_users || []),
+        sprintNumber: row.sprint_number,
+        guildId: row.guild_id,
+        endTime: 0,
+        leaderboardAt: row.leaderboard_at,
+        finalTimer: setTimeout(() => postLeaderboard(row.channel_id, guild), msUntilLeaderboard)
+      };
+
+      console.log(`Restored ending ${row.type} in channel ${row.channel_id} with ${msUntilLeaderboard}ms until leaderboard`);
     }
 
     console.log('Sprint state restored!');
@@ -1860,6 +1963,18 @@ if (interaction.isButton()) {
         sprint.originalParticipants.add(userId);
         sprint.participants = sprint.participants.filter(id => id !== userId);
         await saveActiveSprint(channelId, { ...sprint, guildId: interaction.guild.id });
+        if (Date.now() >= sprint.endTime) {
+          await saveEndingSprint(channelId, {
+            guildId: interaction.guild.id,
+            type: sprint.type,
+            duration: sprint.duration,
+            sprintNumber: sprint.sprintNumber,
+            originalParticipants: sprint.originalParticipants,
+            finalTimes: sprint.finalTimes,
+            submittedUsers: sprint.submittedUsers,
+            leaderboardAt: sprint.leaderboardAt
+          });
+        }
 
         await interaction.update({ content: `Got it! Your **${minutes} minutes** have been logged.`, components: [] });
         const sprintVerb = activeSprints[channelId] ? sprintVerbs[activeSprints[channelId].type] : 'read';
@@ -2565,6 +2680,18 @@ if (interaction.commandName === 'runselfcare') {
       sprint.originalParticipants.add(interaction.user.id);
       sprint.participants = sprint.participants.filter(id => id !== interaction.user.id);
       await saveActiveSprint(channelId, { ...sprint, guildId: interaction.guild.id });
+      if (Date.now() >= sprint.endTime) {
+        await saveEndingSprint(channelId, {
+          guildId: interaction.guild.id,
+          type: sprint.type,
+          duration: sprint.duration,
+          sprintNumber: sprint.sprintNumber,
+          originalParticipants: sprint.originalParticipants,
+          finalTimes: sprint.finalTimes,
+          submittedUsers: sprint.submittedUsers,
+          leaderboardAt: sprint.leaderboardAt
+        });
+      }
 
       await interaction.reply(`<@${interaction.user.id}> has ${verb} for **${minutes} minutes**!`);
 
