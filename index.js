@@ -1997,26 +1997,41 @@ if (interaction.isButton()) {
     }
 
     if (interaction.customId === 'confirm_leave') {
-      try {
-        const sprint = activeSprints[channelId] || pendingSprints[channelId];
-        if (!sprint) {
-          await interaction.update({ content: 'That sprint has already ended!', components: [] });
-          return;
-        }
-        const userId = interaction.user.id;
-        sprint.participants = sprint.participants.filter(id => id !== userId);
-        sprint.originalParticipants.delete(userId);
-        if (activeSprints[channelId]) {
-          await saveActiveSprint(channelId, { ...activeSprints[channelId], guildId: interaction.guild.id });
-        } else if (pendingSprints[channelId]) {
-          await deletePendingSprint(channelId);
-        }
-        await interaction.update({ content: `You've been removed from the sprint. See you next time!`, components: [] });
-        await interaction.channel.send(`<@${userId}> has left the **${sprint.type}**.`);
-      } catch (error) {
-        console.error('Error handling confirm_leave button:', error);
-      }
+  try {
+    const sprint = activeSprints[channelId] || pendingSprints[channelId];
+    if (!sprint) {
+      await interaction.update({ content: 'That sprint has already ended!', components: [] });
+      return;
     }
+
+    const userId = interaction.user.id;
+
+    // Prevent double-click weirdness — if they're not in it, just confirm and move on
+    if (!sprint.participants.includes(userId)) {
+      await interaction.update({ content: "You're already not in this sprint.", components: [] });
+      return;
+    }
+
+    // Remove from participants list (both active and pending sprints have this)
+    sprint.participants = sprint.participants.filter(id => id !== userId);
+
+    if (activeSprints[channelId]) {
+      // Active sprints have originalParticipants as a Set — guard just in case it's ever undefined
+      if (sprint.originalParticipants) {
+        sprint.originalParticipants.delete(userId);
+      }
+      await saveActiveSprint(channelId, { ...sprint, guildId: interaction.guild.id });
+    } else if (pendingSprints[channelId]) {
+      // Pending sprints don't have originalParticipants at all, so we just save the updated participants list
+      await savePendingSprint(channelId, sprint);
+    }
+
+    await interaction.update({ content: `You've been removed from the sprint. See you next time!`, components: [] });
+    await interaction.channel.send(`<@${userId}> has left the **${sprint.type}**.`);
+  } catch (error) {
+    console.error('Error handling confirm_leave button:', error);
+  }
+}
 
     if (interaction.customId === 'deny_leave') {
       await interaction.update({ content: `No problem! Use \`/final\` to submit your minutes when you're ready.`, components: [] });
