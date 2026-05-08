@@ -1036,48 +1036,57 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
     endMessageSent: false,
 
     timer: setTimeout(async () => {
-      const sprint = activeSprints[channelId];
-      if (!sprint || sprint.endMessageSent) return;
-      sprint.endMessageSent = true;
+  const sprint = activeSprints[channelId];
+  if (!sprint || sprint.ending || sprint.endMessageSent) return;
+  sprint.ending = true;
 
-      const verb = sprintVerbs[sprint.type];
-      const submitWindow = minutes <= 30 ? 5 : 7;
-      const finalDeadline = Math.floor((Date.now() + submitWindow * 60 * 1000) / 1000);
-      const mentions = sprint.originalParticipants.size > 0
+  try {
+    const verb = sprintVerbs[sprint.type];
+    const submitWindow = minutes <= 30 ? 5 : 7;
+    const finalDeadline = Math.floor((Date.now() + submitWindow * 60 * 1000) / 1000);
+    const mentions = sprint.originalParticipants.size > 0
       ? [...sprint.originalParticipants].filter(id => !sprint.submittedUsers.has(id)).map(id => `<@${id}>`).join(', ')
-       : null;
-      const endEmoji = randomEmoji(type);
+      : null;
+    const endEmoji = randomEmoji(type);
 
-      const participantText = mentions ? `\n\n✨ **Participants:**\n${mentions}` : '\n\n✨ **Participants:**';
-      await channel.send(`${endEmoji} **THE SPRINT IS OVER** ${endEmoji}\n\nThis **${sprintLabel}** is over, please put in the amount of time you ${verb}. The leaderboard will post <t:${finalDeadline}:R>, you have until then to put in your final count!${participantText}`);
+    const participantText = mentions ? `\n\n✨ **Participants:**\n${mentions}` : '\n\n✨ **Participants:**';
+    await channel.send(`${endEmoji} **THE SPRINT IS OVER** ${endEmoji}\n\nThis **${sprintLabel}** is over, please put in the amount of time you ${verb}. The leaderboard will post <t:${finalDeadline}:R>, you have until then to put in your final count!${participantText}`);
 
-      await saveEndingSprint(channelId, {
-        guildId: guild.id,
-        type: sprint.type,
-        duration: sprint.duration,
-        sprintNumber: sprint.sprintNumber,
-        originalParticipants: sprint.originalParticipants,
-        finalTimes: sprint.finalTimes,
-        submittedUsers: sprint.submittedUsers,
-        leaderboardAt: Date.now() + submitWindow * 60 * 1000
-      });
-      
-      sprint.reminderTimer = setTimeout(async () => {
-        const unsubmitted = [...sprint.originalParticipants].filter(id => !sprint.submittedUsers.has(id));
-        if (unsubmitted.length > 0) {
-          const reminderMentions = unsubmitted.map(id => `<@${id}>`).join(', ');
-          await channel.send(`‼️ **Reminder:**\n${reminderMentions}\nYou have 2 minutes left to submit your final time with \`/final\`!`);
-        }
-      }, (submitWindow - 2) * 60 * 1000);
+    await saveEndingSprint(channelId, {
+      guildId: guild.id,
+      type: sprint.type,
+      duration: sprint.duration,
+      sprintNumber: sprint.sprintNumber,
+      originalParticipants: sprint.originalParticipants,
+      finalTimes: sprint.finalTimes,
+      submittedUsers: sprint.submittedUsers,
+      leaderboardAt: Date.now() + submitWindow * 60 * 1000
+    });
 
-      const allAlreadySubmitted = [...sprint.originalParticipants].every(id => sprint.submittedUsers.has(id));
-      if (allAlreadySubmitted && Object.keys(sprint.finalTimes).length > 0) {
-        await postLeaderboard(channelId, guild);
-      } else {
-        sprint.leaderboardAt = Date.now() + submitWindow * 60 * 1000;
-        sprint.finalTimer = setTimeout(() => postLeaderboard(channelId, guild), submitWindow * 60 * 1000);
+    sprint.endMessageSent = true;
+
+    sprint.reminderTimer = setTimeout(async () => {
+      const unsubmitted = [...sprint.originalParticipants].filter(id => !sprint.submittedUsers.has(id));
+      if (unsubmitted.length > 0) {
+        const reminderMentions = unsubmitted.map(id => `<@${id}>`).join(', ');
+        await channel.send(`‼️ **Reminder:**\n${reminderMentions}\nYou have 2 minutes left to submit your final time with \`/final\`!`);
       }
-    }, minutes * 60 * 1000)
+    }, (submitWindow - 2) * 60 * 1000);
+
+    const allAlreadySubmitted = [...sprint.originalParticipants].every(id => sprint.submittedUsers.has(id));
+    if (allAlreadySubmitted && Object.keys(sprint.finalTimes).length > 0) {
+      await postLeaderboard(channelId, guild);
+    } else {
+      sprint.leaderboardAt = Date.now() + submitWindow * 60 * 1000;
+      sprint.finalTimer = setTimeout(() => postLeaderboard(channelId, guild), submitWindow * 60 * 1000);
+    }
+
+  } catch (err) {
+    console.error('Error in sprint end sequence (startSprint):', err);
+  } finally {
+    sprint.ending = false;
+  }
+}, minutes * 60 * 1000)
   };
 
   // Save sprint state to database
@@ -1584,45 +1593,56 @@ async function restoreSprintState() {
 
         timer: setTimeout(async () => {
           const sprint = activeSprints[row.channel_id];
-          if (!sprint || sprint.endMessageSent) return;
-          sprint.endMessageSent = true;
-          const channel = await client.channels.fetch(row.channel_id);
-          const verb = sprintVerbs[sprint.type];
-          const submitWindow = sprint.duration <= 30 ? 5 : 7;
-          const finalDeadline = Math.floor((Date.now() + submitWindow * 60 * 1000) / 1000);
-          const mentions = sprint.originalParticipants.size > 0
-          ? [...sprint.originalParticipants].filter(id => !sprint.submittedUsers.has(id)).map(id => `<@${id}>`).join(', ')
-          : null;
-          const endEmoji = randomEmoji(sprint.type);
-          const sprintLabel = sprint.sprintNumber ? `Readathon Sprint #${sprint.sprintNumber}` : sprint.type;
-          const participantText = mentions ? `\n\n✨ **Participants:**\n${mentions}` : '\n\n✨ **Participants:**';
-          await channel.send(`${endEmoji} **THE SPRINT IS OVER** ${endEmoji}\n\nThis **${sprintLabel}** is over, please put in the amount of time you ${verb}. The leaderboard will post <t:${finalDeadline}:R>, you have until then to put in your final count!${participantText}`);
+          if (!sprint || sprint.ending || sprint.endMessageSent) return;
+          sprint.ending = true;
 
-        await saveEndingSprint(row.channel_id, {
-            guildId: sprint.guildId,
-            type: sprint.type,
-            duration: sprint.duration,
-            sprintNumber: sprint.sprintNumber,
-            originalParticipants: sprint.originalParticipants,
-            finalTimes: sprint.finalTimes,
-            submittedUsers: sprint.submittedUsers,
-            leaderboardAt: Date.now() + submitWindow * 60 * 1000
-          });
+          try {
+            const channel = await client.channels.fetch(row.channel_id);
+            const verb = sprintVerbs[sprint.type];
+            const submitWindow = sprint.duration <= 30 ? 5 : 7;
+            const finalDeadline = Math.floor((Date.now() + submitWindow * 60 * 1000) / 1000);
+            const mentions = sprint.originalParticipants.size > 0
+              ? [...sprint.originalParticipants].filter(id => !sprint.submittedUsers.has(id)).map(id => `<@${id}>`).join(', ')
+              : null;
+            const endEmoji = randomEmoji(sprint.type);
+            const sprintLabel = sprint.sprintNumber ? `Readathon Sprint #${sprint.sprintNumber}` : sprint.type;
+            const participantText = mentions ? `\n\n✨ **Participants:**\n${mentions}` : '\n\n✨ **Participants:**';
 
-          sprint.reminderTimer = setTimeout(async () => {
-            const unsubmitted = [...sprint.originalParticipants].filter(id => !sprint.submittedUsers.has(id));
-            if (unsubmitted.length > 0) {
-              const reminderMentions = unsubmitted.map(id => `<@${id}>`).join(', ');
-              await channel.send(`‼️ **Reminder:**\n${reminderMentions}\nYou have 2 minutes left to submit your final time with \`/final\`!`);
+            await channel.send(`${endEmoji} **THE SPRINT IS OVER** ${endEmoji}\n\nThis **${sprintLabel}** is over, please put in the amount of time you ${verb}. The leaderboard will post <t:${finalDeadline}:R>, you have until then to put in your final count!${participantText}`);
+
+            await saveEndingSprint(row.channel_id, {
+              guildId: sprint.guildId,
+              type: sprint.type,
+              duration: sprint.duration,
+              sprintNumber: sprint.sprintNumber,
+              originalParticipants: sprint.originalParticipants,
+              finalTimes: sprint.finalTimes,
+              submittedUsers: sprint.submittedUsers,
+              leaderboardAt: Date.now() + submitWindow * 60 * 1000
+            });
+
+            sprint.endMessageSent = true;
+
+            sprint.reminderTimer = setTimeout(async () => {
+              const unsubmitted = [...sprint.originalParticipants].filter(id => !sprint.submittedUsers.has(id));
+              if (unsubmitted.length > 0) {
+                const reminderMentions = unsubmitted.map(id => `<@${id}>`).join(', ');
+                await channel.send(`‼️ **Reminder:**\n${reminderMentions}\nYou have 2 minutes left to submit your final time with \`/final\`!`);
+              }
+            }, (submitWindow - 2) * 60 * 1000);
+
+            const allAlreadySubmitted = [...sprint.originalParticipants].every(id => sprint.submittedUsers.has(id));
+            if (allAlreadySubmitted && Object.keys(sprint.finalTimes).length > 0) {
+              await postLeaderboard(row.channel_id, guild);
+            } else {
+              sprint.leaderboardAt = Date.now() + submitWindow * 60 * 1000;
+              sprint.finalTimer = setTimeout(() => postLeaderboard(row.channel_id, guild), submitWindow * 60 * 1000);
             }
-          }, (submitWindow - 2) * 60 * 1000);
 
-          const allAlreadySubmitted = [...sprint.originalParticipants].every(id => sprint.submittedUsers.has(id));
-          if (allAlreadySubmitted && Object.keys(sprint.finalTimes).length > 0) {
-            await postLeaderboard(row.channel_id, guild);
-          } else {
-            sprint.leaderboardAt = Date.now() + submitWindow * 60 * 1000;
-            sprint.finalTimer = setTimeout(() => postLeaderboard(row.channel_id, guild), submitWindow * 60 * 1000);
+          } catch (err) {
+            console.error('Error in sprint end sequence (restoreSprintState):', err);
+          } finally {
+            sprint.ending = false;
           }
         }, msRemaining)
       };
