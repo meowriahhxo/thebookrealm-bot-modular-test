@@ -2184,6 +2184,8 @@ if (date) {
     const sprintCount = result.rows.length;
     const totalMinutes = result.rows.reduce((sum, row) => sum + row.minutes, 0);
 
+    console.log(`[mystats] ${interaction.user.username} requested ${period} stats${date ? ` for ${date}` : ''} — ${sprintCount} sprints, ${totalMinutes} minutes`);
+
     // If no results, send ephemeral message
     if (sprintCount === 0) {
       await interaction.editReply({ content: `You haven't participated in any sprints this period! Join us in <#${process.env.TALL_TOMES_CHANNEL_ID}> or <#${process.env.SHORT_STACKS_CHANNEL_ID}> to add to your stats!`, flags: 64 });
