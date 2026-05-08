@@ -30,6 +30,13 @@ client.on('error', (error) => {
   console.error('Discord client error:', error);
 });
 
+process.on('SIGTERM', async () => {
+  console.log('[Shutdown] SIGTERM received, shutting down gracefully...');
+  await pool.end();
+  client.destroy();
+  process.exit(0);
+});
+
 client.on('shardDisconnect', (event, id) => {
   console.log(`[Shard ${id}] Disconnected`, event);
 });
@@ -1040,6 +1047,21 @@ function parseTimeToUTC(timeStr, dateStr = null) {
   return target;
 }
 
+// ---- SPRINT CLEANUP ----
+// Centralized cleanup so all sprint teardown happens in one place.
+// If you ever add new timers or new DB tables, update it here and everywhere is covered.
+async function cleanupSprint(channelId) {
+  const sprint = activeSprints[channelId];
+  if (sprint) {
+    clearTimeout(sprint.timer);
+    clearTimeout(sprint.finalTimer);
+    clearTimeout(sprint.reminderTimer);
+  }
+  await deleteActiveSprint(channelId);
+  await deleteEndingSprint(channelId);
+  delete activeSprints[channelId];
+}
+
 // ---- SPRINT FUNCTIONS ----
 async function startSprint(channelId, type, minutes, sprintNumber = null, carriedParticipants = [], guild = null) {
   const channel = await client.channels.fetch(channelId);
@@ -1094,7 +1116,8 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
       const unsubmitted = [...sprint.originalParticipants].filter(id => !sprint.submittedUsers.has(id));
       if (unsubmitted.length > 0) {
         const reminderMentions = unsubmitted.map(id => `<@${id}>`).join(', ');
-        await channel.send(`‼️ **Reminder:**\n${reminderMentions}\nYou have 2 minutes left to submit your final time with \`/final\`!`);
+        const reminderDeadline = Math.floor((Date.now() + 2 * 60 * 1000) / 1000);
+        await channel.send(`‼️ **Reminder:**\n${reminderMentions}\nYou have until <t:${reminderDeadline}:t> to submit your final time with \`/final\`!`);
       }
     }, (submitWindow - 2) * 60 * 1000);
 
@@ -1182,10 +1205,7 @@ async function postLeaderboard(channelId, guild) {
 
 const leaderboardMessage = await channel.send(leaderboard);
 
-  clearTimeout(sprint.timer);
-  clearTimeout(sprint.finalTimer);
-  clearTimeout(sprint.reminderTimer);
-  await deleteEndingSprint(channelId);
+await cleanupSprint(channelId);
   const writeSuccess = await writeSprintToSheets(sprint.finalTimes, guild, sprint.type, sprint.sprintNumber);
 
   if (sprint.type === 'Tall Tomes Sprint' || sprint.type === 'Short Stacks Sprint' || sprint.type === 'Readathon Sprint') {
@@ -1218,8 +1238,6 @@ const leaderboardMessage = await channel.send(leaderboard);
   }
 }
 
-  await deleteActiveSprint(channelId);
-    delete activeSprints[channelId];
   } catch (err) {
     console.error(`[Sprint ${channelId}] Error in postLeaderboard:`, err);
   } finally {
@@ -1667,7 +1685,8 @@ async function restoreSprintState() {
               const unsubmitted = [...sprint.originalParticipants].filter(id => !sprint.submittedUsers.has(id));
               if (unsubmitted.length > 0) {
                 const reminderMentions = unsubmitted.map(id => `<@${id}>`).join(', ');
-                await channel.send(`‼️ **Reminder:**\n${reminderMentions}\nYou have 2 minutes left to submit your final time with \`/final\`!`);
+                const reminderDeadline = Math.floor((Date.now() + 2 * 60 * 1000) / 1000);
+                await channel.send(`‼️ **Reminder:**\n${reminderMentions}\nYou have until <t:${reminderDeadline}:t> to submit your final time with \`/final\`!`);
               }
             }, (submitWindow - 2) * 60 * 1000);
 
@@ -1992,15 +2011,9 @@ if (interaction.isButton()) {
         await interaction.update({ content: 'No sprint to cancel!', components: [] });
         return;
       }
-      clearTimeout(sprint.timer);
-      clearTimeout(sprint.pendingTimer);
-      clearTimeout(sprint.warningTimer);
-      clearTimeout(sprint.finalTimer);
-      clearTimeout(sprint.reminderTimer);
-      await deleteActiveSprint(channelId);
+      await cleanupSprint(channelId);
       await deletePendingSprint(channelId);
-      delete activeSprints[channelId];
-      delete pendingSprints[channelId];
+delete pendingSprints[channelId];
       const mentions = sprint.participants.map(id => `<@${id}>`).join(', ');
       await interaction.update({ content: `The **${sprint.type}** has been cancelled.${mentions ? ` ${mentions}` : ''}`, components: [] });
     }
@@ -2635,14 +2648,8 @@ if (interaction.commandName === 'runselfcare') {
         components: [row]
       });
     } else {
-      clearTimeout(sprint.timer);
-      clearTimeout(sprint.pendingTimer);
-      clearTimeout(sprint.warningTimer);
-      clearTimeout(sprint.finalTimer);
-      clearTimeout(sprint.reminderTimer);
-      await deleteActiveSprint(channelId);
+      await cleanupSprint(channelId);
       await deletePendingSprint(channelId);
-      delete activeSprints[channelId];
       delete pendingSprints[channelId];
 
       await interaction.reply(`The **${sprint.type}** has been cancelled.`);
