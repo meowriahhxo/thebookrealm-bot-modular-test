@@ -211,6 +211,8 @@ async function initializeDatabase() {
         message_id TEXT
       )
     `);
+
+    //// Note: sprint_results also has sprint_ended_at (TIMESTAMPTZ), added via ALTER TABLE
     await pool.query(`
       CREATE TABLE IF NOT EXISTS sprint_results (
         id SERIAL PRIMARY KEY,
@@ -1153,6 +1155,7 @@ async function postLeaderboard(channelId, guild) {
   if (sprint.postingLeaderboard) return;
   sprint.postingLeaderboard = true;
 
+  try {
   const channel = await client.channels.fetch(channelId);
   const sorted = Object.entries(sprint.finalTimes).sort((a, b) => b[1] - a[1]);
   const totalTime = sorted.reduce((sum, [, mins]) => sum + mins, 0);
@@ -1216,7 +1219,14 @@ const leaderboardMessage = await channel.send(leaderboard);
 }
 
   await deleteActiveSprint(channelId);
-  delete activeSprints[channelId];
+    delete activeSprints[channelId];
+  } catch (err) {
+    console.error(`[Sprint ${channelId}] Error in postLeaderboard:`, err);
+  } finally {
+    if (activeSprints[channelId]) {
+      activeSprints[channelId].postingLeaderboard = false;
+    }
+  }
 }
 
 // ---- SPRINT SHEETS FUNCTIONS ----
