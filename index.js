@@ -30,6 +30,23 @@ client.on('error', (error) => {
   console.error('Discord client error:', error);
 });
 
+client.on('shardDisconnect', (event, id) => {
+  console.log(`[Shard ${id}] Disconnected`, event);
+});
+
+client.on('shardReconnecting', (id) => {
+  console.log(`[Shard ${id}] Reconnecting...`);
+});
+
+client.on('shardResume', (id) => {
+  console.log(`[Shard ${id}] Resumed`);
+});
+
+// Heartbeat — logs every 5 minutes so we can confirm the bot is alive in Railway
+setInterval(() => {
+  console.log(`[Heartbeat] Bot alive at ${new Date().toISOString()}`);
+}, 300000);
+
 // ---- HOUSE CONSTANTS ----
 const HOUSES = [
   { name: "House Asphodel", row: 43, col: 2, color: 0x92374e },
@@ -821,7 +838,11 @@ async function postHouseLeaderboard() {
     await channel.send({ embeds: [embed] });
     console.log('Leaderboard posted successfully!');
   } catch (error) {
-    console.error('Error posting leaderboard:', error);
+    console.error('[HouseLeaderboard] Failed to post leaderboard:', {
+      error: error.message,
+      stack: error.stack,
+      timestamp: new Date().toISOString()
+    });
   }
 }
 
@@ -1041,6 +1062,7 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
   sprint.ending = true;
 
   try {
+    console.log(`[Sprint ${channelId}] Ending sequence started (${sprint.type})`);
     const verb = sprintVerbs[sprint.type];
     const submitWindow = minutes <= 30 ? 5 : 7;
     const finalDeadline = Math.floor((Date.now() + submitWindow * 60 * 1000) / 1000);
@@ -1064,6 +1086,7 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
     });
 
     sprint.endMessageSent = true;
+    console.log(`[Sprint ${channelId}] End message sent and ending sprint saved to DB`);
 
     sprint.reminderTimer = setTimeout(async () => {
       const unsubmitted = [...sprint.originalParticipants].filter(id => !sprint.submittedUsers.has(id));
@@ -1082,9 +1105,10 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
     }
 
   } catch (err) {
-    console.error('Error in sprint end sequence (startSprint):', err);
+    console.error(`[Sprint ${channelId}] Error in sprint end sequence (startSprint):`, err);
   } finally {
     sprint.ending = false;
+    console.log(`[Sprint ${channelId}] Ending lock released`);
   }
 }, minutes * 60 * 1000)
   };
@@ -1597,6 +1621,7 @@ async function restoreSprintState() {
           sprint.ending = true;
 
           try {
+            console.log(`[Sprint ${row.channel_id}] Ending sequence started (restored) (${sprint.type})`);
             const channel = await client.channels.fetch(row.channel_id);
             const verb = sprintVerbs[sprint.type];
             const submitWindow = sprint.duration <= 30 ? 5 : 7;
@@ -1622,6 +1647,7 @@ async function restoreSprintState() {
             });
 
             sprint.endMessageSent = true;
+            console.log(`[Sprint ${row.channel_id}] End message sent and ending sprint saved to DB (restored)`);
 
             sprint.reminderTimer = setTimeout(async () => {
               const unsubmitted = [...sprint.originalParticipants].filter(id => !sprint.submittedUsers.has(id));
@@ -1640,9 +1666,10 @@ async function restoreSprintState() {
             }
 
           } catch (err) {
-            console.error('Error in sprint end sequence (restoreSprintState):', err);
+            console.error(`[Sprint ${row.channel_id}] Error in sprint end sequence (restoreSprintState):`, err);
           } finally {
             sprint.ending = false;
+            console.log(`[Sprint ${row.channel_id}] Ending lock released (restored)`);
           }
         }, msRemaining)
       };
