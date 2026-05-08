@@ -1107,7 +1107,9 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
   } catch (err) {
     console.error(`[Sprint ${channelId}] Error in sprint end sequence (startSprint):`, err);
   } finally {
-    sprint.ending = false;
+    if (activeSprints[channelId]) {
+      activeSprints[channelId].ending = false;
+    }
     console.log(`[Sprint ${channelId}] Ending lock released`);
   }
 }, minutes * 60 * 1000)
@@ -1148,6 +1150,8 @@ async function postSprintStart(channelId) {
 async function postLeaderboard(channelId, guild) {
   const sprint = activeSprints[channelId];
   if (!sprint) return;
+  if (sprint.postingLeaderboard) return;
+  sprint.postingLeaderboard = true;
 
   const channel = await client.channels.fetch(channelId);
   const sorted = Object.entries(sprint.finalTimes).sort((a, b) => b[1] - a[1]);
@@ -1668,7 +1672,9 @@ async function restoreSprintState() {
           } catch (err) {
             console.error(`[Sprint ${row.channel_id}] Error in sprint end sequence (restoreSprintState):`, err);
           } finally {
-            sprint.ending = false;
+            if (activeSprints[row.channel_id]) {
+              activeSprints[row.channel_id].ending = false;
+            }
             console.log(`[Sprint ${row.channel_id}] Ending lock released (restored)`);
           }
         }, msRemaining)
