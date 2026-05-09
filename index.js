@@ -2658,7 +2658,7 @@ if (interaction.commandName === 'runselfcare') {
     }
   }
 
-  // ---- /join ----
+ // ---- /join ----
   if (interaction.commandName === 'join') {
     try {
       const sprint = activeSprints[channelId] || pendingSprints[channelId];
@@ -2680,6 +2680,9 @@ if (interaction.commandName === 'runselfcare') {
         return;
       }
 
+      // All checks passed — defer now before the DB write
+      await interaction.deferReply();
+
       sprint.participants.push(interaction.user.id);
       if (activeSprints[channelId]) {
         sprint.originalParticipants.add(interaction.user.id);
@@ -2688,7 +2691,8 @@ if (interaction.commandName === 'runselfcare') {
         await savePendingSprint(channelId, pendingSprints[channelId]);
       }
 
-      // Calculate minutes remaining — if sprint hasn't started yet, use full duration
+// Calculate minutes remaining — if sprint hasn't started yet, use full duration
+
       let minutesRemaining;
       if (activeSprints[channelId]) {
         minutesRemaining = Math.ceil((sprint.endTime - Date.now()) / 60000);
@@ -2696,7 +2700,7 @@ if (interaction.commandName === 'runselfcare') {
         minutesRemaining = sprint.duration;
       }
 
-      await interaction.reply(`<@${interaction.user.id}> has joined the **${sprint.type}** with **${minutesRemaining} minutes** remaining!`);
+      await interaction.editReply(`<@${interaction.user.id}> has joined the **${sprint.type}** with **${minutesRemaining} minutes** remaining!`);
     } catch (error) {
       console.error('Error handling join command:', error);
     }
@@ -2764,6 +2768,9 @@ if (interaction.commandName === 'runselfcare') {
         return;
       }
 
+      // All checks passed — defer now before the DB write
+      await interaction.deferReply();
+
       sprint.finalTimes[interaction.user.id] = minutes;
       sprint.submittedUsers.add(interaction.user.id);
       sprint.originalParticipants.add(interaction.user.id);
@@ -2782,7 +2789,7 @@ if (interaction.commandName === 'runselfcare') {
         });
       }
 
-      await interaction.reply(`<@${interaction.user.id}> has ${verb} for **${minutes} minutes**!`);
+      await interaction.editReply(`<@${interaction.user.id}> has ${verb} for **${minutes} minutes**!`);
 
       const sprintEnded = Date.now() >= sprint.endTime;
       const allSubmitted = [...sprint.originalParticipants].every(id => sprint.submittedUsers.has(id));
