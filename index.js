@@ -2991,10 +2991,6 @@ client.on('guildMemberAdd', async member => {
   try {
     const canvas = createCanvas(800, 300);
     const ctx = canvas.getContext('2d');
-    registerFont('./Roboto-Bold.ttf', { family: 'Roboto', weight: 'bold' });
-    registerFont('./Roboto-Regular.ttf', { family: 'Roboto' });
-    const canvas = createCanvas(800, 300);
-    const ctx = canvas.getContext('2d');
 
     const background = await loadImage('./welcome-background.png');
     ctx.drawImage(background, 0, 0, 800, 300);
