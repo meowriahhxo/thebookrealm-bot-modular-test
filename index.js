@@ -2,6 +2,9 @@ const { Client, GatewayIntentBits, EmbedBuilder, REST, Routes, SlashCommandBuild
 const { google } = require('googleapis');
 const cron = require('node-cron');
 const { Pool } = require('pg');
+const { createCanvas, loadImage, registerFont } = require('canvas');
+registerFont('./Roboto-Bold.ttf', { family: 'Roboto', weight: 'bold' });
+registerFont('./Roboto-Regular.ttf', { family: 'Roboto' });
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -257,6 +260,8 @@ await pool.query(`
     participants TEXT[] DEFAULT '{}'
   )
 `);
+
+//// Note: scheduled_sprints has a UNIQUE constraint on (channel_id, sprint_number), added via ALTER TABLE
 await pool.query(`
   CREATE TABLE IF NOT EXISTS scheduled_sprints (
     id SERIAL PRIMARY KEY,
@@ -1053,9 +1058,9 @@ function parseTimeToUTC(timeStr, dateStr = null) {
 async function cleanupSprint(channelId) {
   const sprint = activeSprints[channelId];
   if (sprint) {
-    clearTimeout(sprint.timer);
-    clearTimeout(sprint.finalTimer);
-    clearTimeout(sprint.reminderTimer);
+    if (sprint.timer) clearTimeout(sprint.timer);
+    if (sprint.finalTimer) clearTimeout(sprint.finalTimer);
+    if (sprint.reminderTimer) clearTimeout(sprint.reminderTimer);
   }
   await deleteActiveSprint(channelId);
   await deleteEndingSprint(channelId);
@@ -1511,7 +1516,11 @@ async function writeSprintToSheets(sprintResults, guild, sprintType, sprintNumbe
 // ---- RESTORE SPRINT STATE ----
 async function restoreSprintState() {
   try {
-    const guild = client.guilds.cache.first();
+    const guild = client.guilds.cache.get(process.env.GUILD_ID);
+if (!guild) {
+  console.error('Guild not found in cache during sprint restore');
+  return;
+}
 
     // Restore pending sprints FIRST so the check in scheduled sprints works
     const pendingResult = await pool.query('SELECT * FROM pending_sprints');
@@ -2036,6 +2045,8 @@ delete pendingSprints[channelId];
           return;
         }
 
+        if (!sprint.submittedUsers) sprint.submittedUsers = new Set();
+        if (!sprint.originalParticipants) sprint.originalParticipants = new Set();
         sprint.finalTimes[userId] = minutes;
         sprint.submittedUsers.add(userId);
         sprint.originalParticipants.add(userId);
@@ -2685,6 +2696,9 @@ if (interaction.commandName === 'runselfcare') {
 
       sprint.participants.push(interaction.user.id);
       if (activeSprints[channelId]) {
+        // Guard against missing Sets after reconnect/state restoration
+        if (!sprint.originalParticipants) sprint.originalParticipants = new Set();
+        if (!sprint.submittedUsers) sprint.submittedUsers = new Set();
         sprint.originalParticipants.add(interaction.user.id);
         await saveActiveSprint(channelId, { ...activeSprints[channelId], guildId: interaction.guild.id });
       } else if (pendingSprints[channelId]) {
@@ -2771,6 +2785,8 @@ if (interaction.commandName === 'runselfcare') {
       // All checks passed — defer now before the DB write
       await interaction.deferReply();
 
+      if (!sprint.submittedUsers) sprint.submittedUsers = new Set();
+      if (!sprint.originalParticipants) sprint.originalParticipants = new Set();
       sprint.finalTimes[interaction.user.id] = minutes;
       sprint.submittedUsers.add(interaction.user.id);
       sprint.originalParticipants.add(interaction.user.id);
@@ -2909,6 +2925,7 @@ client.on('messageCreate', async message => {
         }
         sprint.participants.push(message.author.id);
         if (activeSprints[channelId]) {
+          if (!sprint.originalParticipants) sprint.originalParticipants = new Set();
           sprint.originalParticipants.add(message.author.id);
         }
         // Calculate minutes remaining — if sprint hasn't started yet, use full duration
@@ -2934,6 +2951,8 @@ await message.reply(`<@${message.author.id}> has joined the **${sprint.type}** w
         }
         const sprint = activeSprints[channelId];
         const verb = sprintVerbs[sprint.type];
+        if (!sprint.submittedUsers) sprint.submittedUsers = new Set();
+        if (!sprint.originalParticipants) sprint.originalParticipants = new Set();
         sprint.finalTimes[message.author.id] = minutes;
         sprint.submittedUsers.add(message.author.id);
         sprint.originalParticipants.add(message.author.id);
@@ -2970,7 +2989,8 @@ await message.reply(`<@${message.author.id}> has joined the **${sprint.type}** w
 // ---- GUILD MEMBER ADD ----
 client.on('guildMemberAdd', async member => {
   try {
-    const { createCanvas, loadImage, registerFont } = require('canvas');
+    const canvas = createCanvas(800, 300);
+    const ctx = canvas.getContext('2d');
     registerFont('./Roboto-Bold.ttf', { family: 'Roboto', weight: 'bold' });
     registerFont('./Roboto-Regular.ttf', { family: 'Roboto' });
     const canvas = createCanvas(800, 300);
