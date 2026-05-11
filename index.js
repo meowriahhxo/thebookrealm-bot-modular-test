@@ -1241,24 +1241,33 @@ async function postLeaderboard(channelId, guild) {
     const writeSuccess = await writeSprintToSheets(sprint.finalTimes, guild, sprint.type, sprint.sprintNumber);
 
     if (writeSuccess) {
-      try {
-        await leaderboardMessage.react('<:i_got:1490375689118158848>');
-        const sprintLabel = sprint.sprintNumber ? `Readathon Sprint #${sprint.sprintNumber}` : sprint.type;
-        const endedAt = `<t:${Math.floor(Date.now() / 1000)}:t>`;
-        const messageLink = `https://discord.com/channels/${process.env.GUILD_ID}/${channelId}/${leaderboardMessage.id}`;
-        const threadId = sprintSpamThreads[sprint.type];
-        if (threadId) {
-          const thread = await client.channels.fetch(threadId);
-          const isReadingSprint = ['Tall Tomes Sprint', 'Short Stacks Sprint', 'Readathon Sprint'].includes(sprint.type);
-          const spamMessage = isReadingSprint
-            ? `Updated leaderboard for **${sprintLabel}** ended at ${endedAt} — [View Leaderboard](${messageLink})`
-            : `Updated points for **${sprintLabel}** ended at ${endedAt} — [View Leaderboard](${messageLink})`;
-          await thread.send(spamMessage);
-        }
-      } catch (error) {
-        console.error('Error posting to spam thread:', error);
-      }
+  try {
+    await leaderboardMessage.react('<:i_got:1490375689118158848>');
+    const sprintLabel = sprint.sprintNumber ? `Readathon Sprint #${sprint.sprintNumber}` : sprint.type;
+    const endedAt = `<t:${Math.floor(Date.now() / 1000)}:t>`;
+    const messageLink = `https://discord.com/channels/${process.env.GUILD_ID}/${channelId}/${leaderboardMessage.id}`;
+    const threadId = sprintSpamThreads[sprint.type];
+    if (threadId) {
+      const thread = await client.channels.fetch(threadId);
+      const isReadingSprint = ['Tall Tomes Sprint', 'Short Stacks Sprint', 'Readathon Sprint'].includes(sprint.type);
+      const spamMessage = isReadingSprint
+        ? `Updated leaderboard for **${sprintLabel}** ended at ${endedAt} — [View Leaderboard](${messageLink})`
+        : `Updated points for **${sprintLabel}** ended at ${endedAt} — [View Leaderboard](${messageLink})`;
+      await thread.send(spamMessage);
     }
+  } catch (error) {
+    console.error('Error posting to spam thread:', error);
+  }
+} else {
+  try {
+    const sprintChannel = await client.channels.fetch(process.env.SPRINT_SHENANIGANS_CHANNEL_ID);
+    const sprintLabel = sprint.sprintNumber ? `Readathon Sprint #${sprint.sprintNumber}` : sprint.type;
+    const messageLink = `https://discord.com/channels/${process.env.GUILD_ID}/${channelId}/${leaderboardMessage.id}`;
+    await sprintChannel.send(`⚠️ **Sheets Write Failed**\nSprint: ${sprintLabel}\nThe leaderboard posted but data was not written to Google Sheets. Please update manually — [View Leaderboard](${messageLink})`);
+  } catch (alertError) {
+    console.error('[postLeaderboard] Failed to send Sheets alert:', alertError);
+  }
+}
 
   } catch (err) {
     console.error(`[Sprint ${channelId}] Error in postLeaderboard:`, err);
