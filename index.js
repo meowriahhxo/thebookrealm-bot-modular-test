@@ -384,11 +384,23 @@ async function deleteStickyMessage(channelId) {
 }
 
 async function saveSprintResult(userId, guildId, sprintType, minutes) {
-  await pool.query(
-    `INSERT INTO sprint_results (user_id, guild_id, sprint_type, minutes, sprint_date, sprint_ended_at)
-     VALUES ($1, $2, $3, $4, CURRENT_DATE, NOW())`,
-    [userId, guildId, sprintType, minutes]
-  );
+  try {
+    await pool.query(
+      `INSERT INTO sprint_results (user_id, guild_id, sprint_type, minutes, sprint_date, sprint_ended_at)
+       VALUES ($1, $2, $3, $4, CURRENT_DATE, NOW())`,
+      [userId, guildId, sprintType, minutes]
+    );
+    console.log(`[saveSprintResult] Saved: user=${userId} type=${sprintType} minutes=${minutes}`);
+  } catch (error) {
+    console.error(`[saveSprintResult] FAILED to save: user=${userId} type=${sprintType} minutes=${minutes}`, error);
+    try {
+      const sprintChannel = await client.channels.fetch(process.env.SPRINT_SHENANIGANS_CHANNEL_ID);
+      await sprintChannel.send(`⚠️ **DB Write Failed**\nUser: <@${userId}>\nSprint type: ${sprintType}\nMinutes: ${minutes}\nError: ${error.message}`);
+    } catch (alertError) {
+      console.error('[saveSprintResult] Failed to send alert:', alertError);
+    }
+    throw error;
+  }
 }
 
 // ---- SPRINT STATE PERSISTENCE ----
@@ -1184,64 +1196,69 @@ async function postLeaderboard(channelId, guild) {
   sprint.postingLeaderboard = true;
 
   try {
-  const channel = await client.channels.fetch(channelId);
-  const sorted = Object.entries(sprint.finalTimes).sort((a, b) => b[1] - a[1]);
-  const totalTime = sorted.reduce((sum, [, mins]) => sum + mins, 0);
+    const channel = await client.channels.fetch(channelId);
+    const sorted = Object.entries(sprint.finalTimes).sort((a, b) => b[1] - a[1]);
+    const totalTime = sorted.reduce((sum, [, mins]) => sum + mins, 0);
 
-  let leaderboard = '🏆 **GREAT JOB EVERYONE** 🏆\n\n';
-  let currentRank = 1;
-  let previousTime = null;
-  let displayRank = 1;
+    let leaderboard = '🏆 **GREAT JOB EVERYONE** 🏆\n\n';
+    let currentRank = 1;
+    let previousTime = null;
+    let displayRank = 1;
 
-  for (let i = 0; i < sorted.length; i++) {
-    const [userId, minutes] = sorted[i];
-    if (minutes === previousTime) {
-      leaderboard += `= ${displayRank}. <@${userId}> — **${minutes} minutes**\n`;
-    } else {
-      displayRank = currentRank;
-      leaderboard += `${displayRank}. <@${userId}> — **${minutes} minutes**\n`;
-      previousTime = minutes;
+    for (let i = 0; i < sorted.length; i++) {
+      const [userId, minutes] = sorted[i];
+      if (minutes === previousTime) {
+        leaderboard += `= ${displayRank}. <@${userId}> — **${minutes} minutes**\n`;
+      } else {
+        displayRank = currentRank;
+        leaderboard += `${displayRank}. <@${userId}> — **${minutes} minutes**\n`;
+        previousTime = minutes;
+      }
+      currentRank++;
     }
-    currentRank++;
-  }
 
-  leaderboard += `\nMinutes Read: **${totalTime} minutes** in a **${sprint.duration} minute** sprint!\n`;
-  leaderboard += `\nThanks for joining us. You can use the \`/sprint\` command to start another sprint!\n\n-# If your minutes total is not correct on the leaderboard or if the bot has **not** reacted to this post (please give it 2 minutes to process the data), please tag the Keepers of the Realm role to have it adjusted!\n\n`;
+    leaderboard += `\nMinutes Read: **${totalTime} minutes** in a **${sprint.duration} minute** sprint!\n`;
+    leaderboard += `\nThanks for joining us. You can use the \`/sprint\` command to start another sprint!\n\n-# If your minutes total is not correct on the leaderboard or if the bot has **not** reacted to this post (please give it 2 minutes to process the data), please tag the Keepers of the Realm role to have it adjusted!\n\n`;
 
-const leaderboardMessage = await channel.send(leaderboard);
-
-await cleanupSprint(channelId);
-  const writeSuccess = await writeSprintToSheets(sprint.finalTimes, guild, sprint.type, sprint.sprintNumber);
-
-  if (sprint.type === 'Tall Tomes Sprint' || sprint.type === 'Short Stacks Sprint' || sprint.type === 'Readathon Sprint') {
-    for (const [userId, minutes] of Object.entries(sprint.finalTimes)) {
-      try {
-        await saveSprintResult(userId, guild.id, sprint.type, minutes);
-      } catch (error) {
-        console.error('Error saving sprint result to database:', error);
+    // 1. Save to DB FIRST — canonical records persisted before anything else
+    if (sprint.type === 'Tall Tomes Sprint' || sprint.type === 'Short Stacks Sprint' || sprint.type === 'Readathon Sprint') {
+      for (const [userId, minutes] of Object.entries(sprint.finalTimes)) {
+        try {
+          await saveSprintResult(userId, guild.id, sprint.type, minutes);
+        } catch (error) {
+          console.error('Error saving sprint result to database:', error);
+        }
       }
     }
-  }
 
-  if (writeSuccess) {
-  try {
-    await leaderboardMessage.react('<:i_got:1490375689118158848>');
-    const sprintLabel = sprint.sprintNumber ? `Readathon Sprint #${sprint.sprintNumber}` : sprint.type;
-    const endedAt = `<t:${Math.floor(Date.now() / 1000)}:t>`;
-    const messageLink = `https://discord.com/channels/${process.env.GUILD_ID}/${channelId}/${leaderboardMessage.id}`;
-    const threadId = sprintSpamThreads[sprint.type];
-    if (threadId) {
-      const thread = await client.channels.fetch(threadId);
-      const isReadingSprint = ['Tall Tomes Sprint', 'Short Stacks Sprint', 'Readathon Sprint'].includes(sprint.type);
-      const spamMessage = isReadingSprint
-        ? `Updated leaderboard for **${sprintLabel}** ended at ${endedAt} — [View Leaderboard](${messageLink})`
-        : `Updated points for **${sprintLabel}** ended at ${endedAt} — [View Leaderboard](${messageLink})`;
-      await thread.send(spamMessage);
+    // 2. Send leaderboard message
+    const leaderboardMessage = await channel.send(leaderboard);
+
+    // 3. Clean up sprint state
+    await cleanupSprint(channelId);
+
+    // 4. Write to Sheets
+    const writeSuccess = await writeSprintToSheets(sprint.finalTimes, guild, sprint.type, sprint.sprintNumber);
+
+    if (writeSuccess) {
+      try {
+        await leaderboardMessage.react('<:i_got:1490375689118158848>');
+        const sprintLabel = sprint.sprintNumber ? `Readathon Sprint #${sprint.sprintNumber}` : sprint.type;
+        const endedAt = `<t:${Math.floor(Date.now() / 1000)}:t>`;
+        const messageLink = `https://discord.com/channels/${process.env.GUILD_ID}/${channelId}/${leaderboardMessage.id}`;
+        const threadId = sprintSpamThreads[sprint.type];
+        if (threadId) {
+          const thread = await client.channels.fetch(threadId);
+          const isReadingSprint = ['Tall Tomes Sprint', 'Short Stacks Sprint', 'Readathon Sprint'].includes(sprint.type);
+          const spamMessage = isReadingSprint
+            ? `Updated leaderboard for **${sprintLabel}** ended at ${endedAt} — [View Leaderboard](${messageLink})`
+            : `Updated points for **${sprintLabel}** ended at ${endedAt} — [View Leaderboard](${messageLink})`;
+          await thread.send(spamMessage);
+        }
+      } catch (error) {
+        console.error('Error posting to spam thread:', error);
+      }
     }
-  } catch (error) {
-    console.error('Error posting to spam thread:', error);
-  }
-}
 
   } catch (err) {
     console.error(`[Sprint ${channelId}] Error in postLeaderboard:`, err);
@@ -1505,7 +1522,7 @@ async function writeSprintToSheets(sprintResults, guild, sprintType, sprintNumbe
       }
     }
 
-    console.log(`Sprint results written to ${tabName} and 2026 Overall!`);
+    console.log(`[SHEETS WRITE COMPLETE] ${tabName} and 2026 Overall — ${Object.keys(sprintResults).length} users written`);
     return readathonSuccess;
   } catch (error) {
     console.error('Error writing to Google Sheets:', error);
