@@ -390,7 +390,6 @@ async function saveSprintResult(userId, guildId, sprintType, minutes) {
        VALUES ($1, $2, $3, $4, CURRENT_DATE, NOW())`,
       [userId, guildId, sprintType, minutes]
     );
-    console.log(`[saveSprintResult] Saved: user=${userId} type=${sprintType} minutes=${minutes}`);
   } catch (error) {
     console.error(`[saveSprintResult] FAILED to save: user=${userId} type=${sprintType} minutes=${minutes}`, error);
     try {
@@ -1221,16 +1220,21 @@ async function postLeaderboard(channelId, guild) {
     leaderboard += `\nThanks for joining us. You can use the \`/sprint\` command to start another sprint!\n\n-# If your minutes total is not correct on the leaderboard or if the bot has **not** reacted to this post (please give it 2 minutes to process the data), please tag the Keepers of the Realm role to have it adjusted!\n\n`;
 
     // 1. Save to DB FIRST — canonical records persisted before anything else
-    if (sprint.type === 'Tall Tomes Sprint' || sprint.type === 'Short Stacks Sprint' || sprint.type === 'Readathon Sprint') {
-      for (const [userId, minutes] of Object.entries(sprint.finalTimes)) {
-        try {
-          await saveSprintResult(userId, guild.id, sprint.type, minutes);
-        } catch (error) {
-          console.error('Error saving sprint result to database:', error);
-        }
-      }
+if (sprint.type === 'Tall Tomes Sprint' || sprint.type === 'Short Stacks Sprint' || sprint.type === 'Readathon Sprint') {
+  for (const [userId, minutes] of Object.entries(sprint.finalTimes)) {
+    try {
+      let displayName = userId;
+      try {
+        const member = await guild.members.fetch(userId);
+        displayName = member.displayName;
+      } catch {}
+      await saveSprintResult(userId, guild.id, sprint.type, minutes);
+      console.log(`[DB] Saved: ${displayName} (${userId}) — ${minutes} minutes`);
+    } catch (error) {
+      console.error('Error saving sprint result to database:', error);
     }
-
+  }
+}
     // 2. Send leaderboard message
     const leaderboardMessage = await channel.send(leaderboard);
 
