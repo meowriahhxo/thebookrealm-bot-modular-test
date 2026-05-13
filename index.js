@@ -1080,6 +1080,10 @@ async function cleanupSprint(channelId) {
 
 // ---- SPRINT FUNCTIONS ----
 async function startSprint(channelId, type, minutes, sprintNumber = null, carriedParticipants = [], guild = null) {
+  if (!guild?.id) {
+    console.error(`[startSprint] Missing guild for ${channelId}`);
+    return;
+  }
   const channel = await client.channels.fetch(channelId);
   const endTime = Math.floor((Date.now() + minutes * 60 * 1000) / 1000);
   const sprintLabel = sprintNumber ? `Readathon Sprint #${sprintNumber}` : type;
@@ -2518,20 +2522,20 @@ if (interaction.commandName === 'runselfcare') {
 
     await interaction.reply(`${announceEmoji} **JOIN THE SPRINT** ${announceEmoji}\n\nThe next **${type}** runs for **${minutes} minutes** and will begin <t:${startsAtTimestamp}:R>.\n\nUse \`/join\` to join and \`/final\` if you have to leave early!`);
 
-    pendingSprints[channelId] = {
-      type,
-      duration: minutes,
-      startsAt,
-      guildId: interaction.guild.id,
-      participants: [],
-      pendingTimer: setTimeout(async () => {
-        const pending = pendingSprints[channelId];
-        const carriedParticipants = pending ? [...pending.participants] : [];
-        delete pendingSprints[channelId];
-        const guild = client.guilds.cache.get(pending.guildId);
-        await startSprint(channelId, type, minutes, null, carriedParticipants, guild);
-        await postSprintStart(channelId);
-      }, startsIn * 60 * 1000)
+    pendingTimer: setTimeout(async () => {
+  const pending = pendingSprints[channelId];
+
+  if (!pending?.guildId) {
+    console.warn(`[Pending Sprint] Missing pending sprint for ${channelId}`);
+    return;
+  }
+
+  const carriedParticipants = [...pending.participants];
+  delete pendingSprints[channelId];
+  const guild = client.guilds.cache.get(pending.guildId);
+  await startSprint(channelId, type, minutes, null, carriedParticipants, guild);
+  await postSprintStart(channelId);
+}, startsIn * 60 * 1000)
     };
     await savePendingSprint(channelId, pendingSprints[channelId]);
   }
