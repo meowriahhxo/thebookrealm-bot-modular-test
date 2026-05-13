@@ -2522,20 +2522,24 @@ if (interaction.commandName === 'runselfcare') {
 
     await interaction.reply(`${announceEmoji} **JOIN THE SPRINT** ${announceEmoji}\n\nThe next **${type}** runs for **${minutes} minutes** and will begin <t:${startsAtTimestamp}:R>.\n\nUse \`/join\` to join and \`/final\` if you have to leave early!`);
 
-    pendingTimer: setTimeout(async () => {
-  const pending = pendingSprints[channelId];
-
-  if (!pending?.guildId) {
-    console.warn(`[Pending Sprint] Missing pending sprint for ${channelId}`);
-    return;
-  }
-
-  const carriedParticipants = [...pending.participants];
-  delete pendingSprints[channelId];
-  const guild = client.guilds.cache.get(pending.guildId);
-  await startSprint(channelId, type, minutes, null, carriedParticipants, guild);
-  await postSprintStart(channelId);
-}, startsIn * 60 * 1000)
+    pendingSprints[channelId] = {
+      type,
+      duration: minutes,
+      startsAt,
+      guildId: interaction.guild.id,
+      participants: [],
+      pendingTimer: setTimeout(async () => {
+        const pending = pendingSprints[channelId];
+        if (!pending?.guildId) {
+          console.warn(`[Pending Sprint] Missing pending sprint for ${channelId}`);
+          return;
+        }
+        const carriedParticipants = [...pending.participants];
+        delete pendingSprints[channelId];
+        const guild = client.guilds.cache.get(pending.guildId);
+        await startSprint(channelId, type, minutes, null, carriedParticipants, guild);
+        await postSprintStart(channelId);
+      }, startsIn * 60 * 1000)
     };
     await savePendingSprint(channelId, pendingSprints[channelId]);
   }
@@ -2794,7 +2798,7 @@ if (interaction.commandName === 'runselfcare') {
 
       const sprint = activeSprints[channelId];
       const verb = sprintVerbs[sprint.type];
-      const wasParticipant = sprint.originalParticipants.has(interaction.user.id) || sprint.participants.includes(interaction.user.id);
+      const wasParticipant = sprint.originalParticipants?.has(interaction.user.id) || sprint.participants?.includes(interaction.user.id);
 
       if (!wasParticipant) {
         const row = new ActionRowBuilder().addComponents(
