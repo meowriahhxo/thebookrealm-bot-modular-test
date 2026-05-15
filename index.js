@@ -1115,8 +1115,16 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
       : null;
     const endEmoji = randomEmoji(type);
 
+    const mainMessage = `${endEmoji} **THE SPRINT IS OVER** ${endEmoji}\n\nThis **${sprintLabel}** is over, please put in the amount of time you ${verb}. The leaderboard will post <t:${finalDeadline}:R>, you have until then to put in your final count!`;
     const participantText = mentions ? `\n\n✨ **Participants:**\n${mentions}` : '\n\n✨ **Participants:**';
-    await channel.send(`${endEmoji} **THE SPRINT IS OVER** ${endEmoji}\n\nThis **${sprintLabel}** is over, please put in the amount of time you ${verb}. The leaderboard will post <t:${finalDeadline}:R>, you have until then to put in your final count!${participantText}`);
+    const fullMessage = mainMessage + participantText;
+
+    if (fullMessage.length > 1900) {
+      await channel.send(mainMessage + '\n\n✨ **Participants:**');
+      await channel.send(mentions);
+    } else {
+      await channel.send(fullMessage);
+}
 
     await saveEndingSprint(channelId, {
       guildId: guild.id,
@@ -1137,7 +1145,13 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
       if (unsubmitted.length > 0) {
         const reminderMentions = unsubmitted.map(id => `<@${id}>`).join(', ');
         const reminderDeadline = Math.floor((Date.now() + 2 * 60 * 1000) / 1000);
-        await channel.send(`‼️ **Reminder:**\n${reminderMentions}\nYou have until <t:${reminderDeadline}:t> to submit your final time with \`/final\`!`);
+        const reminderMessage = `‼️ **Reminder:**\nYou have until <t:${reminderDeadline}:t> to submit your final time with \`/final\`!\n${reminderMentions}`;
+      if (reminderMessage.length > 1900) {
+        await channel.send(`‼️ **Reminder:** You have until <t:${reminderDeadline}:t> to submit your final time with \`/final\`!`);
+        await channel.send(reminderMentions);
+      } else {
+        await channel.send(reminderMessage);
+      }
       }
     }, (submitWindow - 2) * 60 * 1000);
 
@@ -1240,7 +1254,24 @@ if (sprint.type === 'Tall Tomes Sprint' || sprint.type === 'Short Stacks Sprint'
   }
 }
     // 2. Send leaderboard message
-    const leaderboardMessage = await channel.send(leaderboard);
+    const chunks = [];
+    let current = '';
+    for (const line of leaderboard.split('\n')) {
+      if ((current + line + '\n').length > 1900) {
+        chunks.push(current);
+        current = '';
+      }
+      current += line + '\n';
+    }
+    if (current) chunks.push(current);
+
+    const leaderboardMessage = await channel.send(chunks[0]);
+    const allMessages = [leaderboardMessage];
+    for (let i = 1; i < chunks.length; i++) {
+      const followUp = await channel.send(chunks[i]);
+      allMessages.push(followUp);
+    }
+
 
     // 3. Clean up sprint state
     await cleanupSprint(channelId);
@@ -1250,7 +1281,9 @@ if (sprint.type === 'Tall Tomes Sprint' || sprint.type === 'Short Stacks Sprint'
 
     if (writeSuccess) {
   try {
-    await leaderboardMessage.react('<:i_got:1490375689118158848>');
+    for (const msg of allMessages) {
+  await msg.react('<:i_got:1490375689118158848>');
+}
     const sprintLabel = sprint.sprintNumber ? `Readathon Sprint #${sprint.sprintNumber}` : sprint.type;
     const endedAt = `<t:${Math.floor(Date.now() / 1000)}:t>`;
     const messageLink = `https://discord.com/channels/${process.env.GUILD_ID}/${channelId}/${leaderboardMessage.id}`;
@@ -1706,9 +1739,16 @@ if (!guild) {
               : null;
             const endEmoji = randomEmoji(sprint.type);
             const sprintLabel = sprint.sprintNumber ? `Readathon Sprint #${sprint.sprintNumber}` : sprint.type;
+            const mainMessage = `${endEmoji} **THE SPRINT IS OVER** ${endEmoji}\n\nThis **${sprintLabel}** is over, please put in the amount of time you ${verb}. The leaderboard will post <t:${finalDeadline}:R>, you have until then to put in your final count!`;
             const participantText = mentions ? `\n\n✨ **Participants:**\n${mentions}` : '\n\n✨ **Participants:**';
+            const fullMessage = mainMessage + participantText;
 
-            await channel.send(`${endEmoji} **THE SPRINT IS OVER** ${endEmoji}\n\nThis **${sprintLabel}** is over, please put in the amount of time you ${verb}. The leaderboard will post <t:${finalDeadline}:R>, you have until then to put in your final count!${participantText}`);
+            if (fullMessage.length > 1900) {
+              await channel.send(mainMessage + '\n\n✨ **Participants:**');
+              await channel.send(mentions);
+            } else {
+              await channel.send(fullMessage);
+            }
 
             await saveEndingSprint(row.channel_id, {
               guildId: sprint.guildId,
@@ -1729,7 +1769,13 @@ if (!guild) {
               if (unsubmitted.length > 0) {
                 const reminderMentions = unsubmitted.map(id => `<@${id}>`).join(', ');
                 const reminderDeadline = Math.floor((Date.now() + 2 * 60 * 1000) / 1000);
-                await channel.send(`‼️ **Reminder:**\n${reminderMentions}\nYou have until <t:${reminderDeadline}:t> to submit your final time with \`/final\`!`);
+                const reminderMessage = `‼️ **Reminder:**\nYou have until <t:${reminderDeadline}:t> to submit your final time with \`/final\`!\n${reminderMentions}`;
+                if (reminderMessage.length > 1900) {
+                  await channel.send(`‼️ **Reminder:** You have until <t:${reminderDeadline}:t> to submit your final time with \`/final\`!`);
+                  await channel.send(reminderMentions);
+                } else {
+                  await channel.send(reminderMessage);
+                }
               }
             }, (submitWindow - 2) * 60 * 1000);
 
@@ -2396,11 +2442,26 @@ if (interaction.commandName === 'scheduled') {
     }
 
     const lines = allScheduled.map(s => {
-      const timestamp = Math.floor(s.startTime / 1000);
-      return `**Readathon Sprint #${s.number}** — <#${s.channelId}> — starts <t:${timestamp}:R> at <t:${timestamp}:t> — ${s.minutes} minutes long`;
-    });
+    const timestamp = Math.floor(s.startTime / 1000);
+    return `**#${s.number}** — <t:${timestamp}:t> — ${s.minutes}min`;
+  });
 
-    await interaction.reply({ content: `📅 **Upcoming Scheduled Sprints:**\n\n${lines.join('\n')}` });
+const chunks = [];
+let current = '📅 **Upcoming Scheduled Sprints:**\n\n';
+for (const line of lines) {
+  if ((current + line + '\n').length > 1900) {
+    chunks.push(current);
+    current = '';
+  }
+  current += line + '\n';
+}
+if (current) chunks.push(current);
+
+await interaction.reply({ content: chunks[0] });
+    for (let i = 1; i < chunks.length; i++) {
+      await interaction.followUp({ content: chunks[i], flags: 64 });
+    }
+
   } catch (error) {
     console.error('Error handling scheduled command:', error);
   }
