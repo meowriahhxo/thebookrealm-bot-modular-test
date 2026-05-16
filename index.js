@@ -1013,6 +1013,12 @@ async function checkForNewQuizSubmissions() {
   }
 }
 
+// ---- DELAY HELPER ----
+// Used to avoid hitting the 60 writes/minute quota
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 // ---- SPRINT HELPERS ----
 function randomEmoji(type) {
   const pool = getSprintEmojis(type);
@@ -1384,8 +1390,10 @@ async function writeCreativeSprints(sprintResults, guild, sprintType) {
         requestBody: { values: [[current + minutes]] }
       });
       console.log(`Updated ${house} in ${tabName} for ${sprintType} (+${minutes} minutes)`);
-    }
 
+    // Throttle writes to avoid hitting Google Sheets quota
+      await delay(500);
+}
     console.log(`${sprintType} results fully written to Points spreadsheet!`);
     return true;
   } catch (error) {
@@ -1424,6 +1432,7 @@ async function writeReadathonToSheets(sprintResults, guild, sprintNumber) {
         member = await guild.members.fetch(userId);
       } catch (e) {
         console.log(`Could not fetch member ${userId} for Readathon Sprint #${sprintNumber}`);
+        await delay(1000);
         continue;
       }
 
@@ -1437,6 +1446,7 @@ async function writeReadathonToSheets(sprintResults, guild, sprintNumber) {
 
       if (!house) {
         console.log(`No house found for ${userId} in Readathon Sprint #${sprintNumber}`);
+        await delay(1000);
         continue;
       }
 
@@ -1476,6 +1486,9 @@ async function writeReadathonToSheets(sprintResults, guild, sprintNumber) {
         }
         console.log(`Added ${displayName} (${userId}) to Readathon Sprint #${sprintNumber} — ${minutes} minutes`);
       }
+
+      // Throttle writes to avoid hitting Google Sheets quota (60 writes/minute)
+      await delay(1000);
     }
     console.log(`Readathon Sprint #${sprintNumber} results fully written to Readathon Leaderboard!`);
     return true;
@@ -1522,6 +1535,7 @@ async function writeSprintToSheets(sprintResults, guild, sprintType, sprintNumbe
           member = await guild.members.fetch(userId);
         } catch (e) {
           console.log(`Could not fetch member ${userId} for ${sprintType} in ${targetTab}`);
+          await delay(1000);
           continue;
         }
 
@@ -1542,6 +1556,7 @@ async function writeSprintToSheets(sprintResults, guild, sprintType, sprintNumbe
 
         if (!house) {
           console.log(`No house found for ${userId} in ${sprintType} — ${targetTab}`);
+          await delay(1000);
           continue;
         }
 
@@ -1569,6 +1584,9 @@ async function writeSprintToSheets(sprintResults, guild, sprintType, sprintNumbe
           });
           console.log(`Added ${displayName} (${userId}) to ${targetTab} — ${minutes} minutes`);
         }
+
+        // Throttle writes to avoid hitting Google Sheets quota (60 writes/minute)
+        await delay(1000);
       }
     }
 
