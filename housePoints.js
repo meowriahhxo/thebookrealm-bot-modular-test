@@ -21,11 +21,21 @@ const categoryChannels = {
 // /addpoints command definition
 const addPointsCommand = new SlashCommandBuilder()
     .setName('addpoints')
-    .setDescription('Add house points for a member')
+    .setDescription('Add house points for a member or a whole house')
     .addUserOption(option =>
         option.setName('user')
             .setDescription('The member to award points to')
-            .setRequired(true))
+            .setRequired(false))
+    .addStringOption(option =>
+        option.setName('house')
+            .setDescription('Award points to a whole house instead of a specific user')
+            .setRequired(false)
+            .addChoices(
+                { name: 'Asphodel', value: 'Asphodel' },
+                { name: 'Dreanni', value: 'Dreanni' },
+                { name: 'Laiidon', value: 'Laiidon' },
+                { name: 'Zeldarian', value: 'Zeldarian' }
+            ))
     .addStringOption(option =>
         option.setName('category')
             .setDescription('The category of points')
@@ -55,65 +65,53 @@ const addPointsCommand = new SlashCommandBuilder()
 // handles the /addpoints command
 async function handleAddPoints(interaction) {
   try {
-    // check if the user has the mod role
+    await interaction.deferReply({ flags: 64 });
+
     const modMember = await interaction.guild.members.fetch(interaction.user.id);
     if (!modMember.roles.cache.has(process.env.MOD_ROLE_ID)) {
-        return interaction.reply({
-            content: 'You do not have permission to use this command.',
-            flags: 64
-        });
+      return interaction.editReply({ content: 'You do not have permission to use this command.' });
     }
-    // get all the options the mod selected
+
     const targetUser = interaction.options.getUser('user');
     const category = interaction.options.getString('category');
     const points = interaction.options.getInteger('points');
     const note = interaction.options.getString('note');
 
-    // fetch the member from the guild so we can check their roles
     const member = await interaction.guild.members.fetch(targetUser.id);
 
-    // house role IDs
     const houseRoles = {
-        'Asphodel': process.env.ASPHODEL_ROLE_ID,
-        'Dreanni': process.env.DREANNI_ROLE_ID,
-        'Laiidon': process.env.LAIIDON_ROLE_ID,
-        'Zeldarian': process.env.ZELDARIAN_ROLE_ID
+      'Asphodel': process.env.ASPHODEL_ROLE_ID,
+      'Dreanni': process.env.DREANNI_ROLE_ID,
+      'Laiidon': process.env.LAIIDON_ROLE_ID,
+      'Zeldarian': process.env.ZELDARIAN_ROLE_ID
     };
 
-    // figure out which house the member belongs to
     let house = null;
-    console.log('Member roles:', [...member.roles.cache.keys()]);
-    console.log('House role IDs:', houseRoles);
     for (const [houseName, roleId] of Object.entries(houseRoles)) {
-        if (member.roles.cache.has(roleId)) {
-            house = houseName;
-            break;
-        }
+      if (member.roles.cache.has(roleId)) {
+        house = houseName;
+        break;
+      }
     }
 
-    // if they don't have a house role, stop here
     if (!house) {
-        return interaction.reply({
-            content: `${targetUser.username} doesn't have a house role assigned yet!`,
-            flags: 64
-        });
+      return interaction.editReply({ content: `${targetUser.username} doesn't have a house role assigned yet!` });
     }
 
-    // save to the database
     const result = await pool.query(
-        `INSERT INTO house_points (user_id, username, house, category, points, added_by, channel_id, note)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         RETURNING id`,
-        [
-            targetUser.id,
-            targetUser.username,
-            house,
-            category,
-            points,
-            interaction.user.username,
-            categoryChannels[category],
-            note || null
-        ]
+      `INSERT INTO house_points (user_id, username, house, category, points, added_by, channel_id, note)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id`,
+      [
+        targetUser.id,
+        targetUser.username,
+        house,
+        category,
+        points,
+        interaction.user.username,
+        categoryChannels[category],
+        note || null
+      ]
     );
 
     const entryId = result.rows[0].id;
@@ -129,12 +127,12 @@ async function handleAddPoints(interaction) {
       console.log(`Could not post to announcement channel for ${category} — skipping`);
     }
 
-    // send ephemeral confirmation to the mod
-    await interaction.reply({
-        content: `${house} - ${targetUser.username} - ${category} - ${points} points` +
-            (note ? `\n*📝 ${note}*` : '') +
-            `\n✅ Logged - Entry ID: \`${entryId}\``,
-        flags: 64
+    console.log(`[addpoints] ${interaction.user.username} added ${points} points to ${targetUser.username} (${house}) for ${category}`);
+
+    await interaction.editReply({
+      content: `${house} - ${targetUser.username} - ${category} - ${points} points` +
+        (note ? `\n*📝 ${note}*` : '') +
+        `\n✅ Logged - Entry ID: \`${entryId}\``
     });
   } catch (error) {
     console.error('Error handling addpoints command:', error);
@@ -150,44 +148,34 @@ const removePointsCommand = new SlashCommandBuilder()
             .setDescription('The entry ID to remove')
             .setRequired(true));
 
-            // handles the /removepoints command
+// handles the /removepoints command
 async function handleRemovePoints(interaction) {
   try {
-    // check if the user has the mod role
+    await interaction.deferReply({ flags: 64 });
+
     const modMember = await interaction.guild.members.fetch(interaction.user.id);
     if (!modMember.roles.cache.has(process.env.MOD_ROLE_ID)) {
-        return interaction.reply({
-            content: 'You do not have permission to use this command.',
-            flags: 64
-        });
+      return interaction.editReply({ content: 'You do not have permission to use this command.' });
     }
+
     const id = interaction.options.getInteger('id');
 
-    // check if the entry exists first
-    const check = await pool.query(
-        'SELECT * FROM house_points WHERE id = $1',
-        [id]
-    );
+    const check = await pool.query('SELECT * FROM house_points WHERE id = $1', [id]);
 
-    // if no entry found, tell the mod
     if (check.rows.length === 0) {
-        return interaction.reply({
-            content: `❌ No entry found with ID \`${id}\`.`,
-            flags: 64
-        });
+      return interaction.editReply({ content: `❌ No entry found with ID \`${id}\`.` });
     }
 
-    // delete the entry
     const entry = check.rows[0];
     await pool.query('DELETE FROM house_points WHERE id = $1', [id]);
 
-    // confirm to the mod
-    await interaction.reply({
-        content: `🗑️ Removed entry \`${id}\` — ${entry.house} - ${entry.username} - ${entry.category} - ${entry.points} points`,
-        flags: 64
+    console.log(`[removepoints] ${interaction.user.username} removed entry ${id} — ${entry.house} - ${entry.username} - ${entry.category} - ${entry.points} points`);
+
+    await interaction.editReply({
+      content: `🗑️ Removed entry \`${id}\` — ${entry.house} - ${entry.username} - ${entry.category} - ${entry.points} points`
     });
- } catch (error) {
-    console.error('Error handling addpoints command:', error);
+  } catch (error) {
+    console.error('Error handling removepoints command:', error);
   }
 }
 
@@ -199,81 +187,74 @@ const pointsLogCommand = new SlashCommandBuilder()
 // handles the /pointslog command
 async function handlePointsLog(interaction) {
   try {
-    // check if the user has the mod role
+    await interaction.deferReply({ flags: 64 });
+
     const modMember = await interaction.guild.members.fetch(interaction.user.id);
     if (!modMember.roles.cache.has(process.env.MOD_ROLE_ID)) {
-        return interaction.reply({
-            content: 'You do not have permission to use this command.',
-            flags: 64
-        });
+      return interaction.editReply({ content: 'You do not have permission to use this command.' });
     }
-    // fetch all entries from the database, newest first
-    const result = await pool.query(
-        'SELECT * FROM house_points ORDER BY created_at DESC'
-    );
+
+    console.log(`[pointslog] ${interaction.user.username} viewed the points log`);
+
+    const result = await pool.query('SELECT * FROM house_points ORDER BY created_at DESC');
 
     const entries = result.rows;
     const pageSize = 15;
     const totalPages = Math.ceil(entries.length / pageSize);
     let currentPage = 0;
 
-    // builds the text for a given page
     function buildPage(page) {
-        const start = page * pageSize;
-        const slice = entries.slice(start, start + pageSize);
-        const lines = slice.map(e => {
-            const date = new Date(e.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-            return `\`${e.id}\` - ${e.house} - ${e.username} - ${e.category} - ${e.points} points - ${date} - added by ${e.added_by}`;
-        }).join('\n');
-        return lines;
+      const start = page * pageSize;
+      const slice = entries.slice(start, start + pageSize);
+      const lines = slice.map(e => {
+        const date = new Date(e.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+        return `\`${e.id}\` - ${e.house} - ${e.username} - ${e.category} - ${e.points} points - ${date} - added by ${e.added_by}`;
+      }).join('\n');
+      return lines;
     }
 
-    // build the initial embed
     const embed = new EmbedBuilder()
-        .setTitle('House Points Log')
-        .setDescription(buildPage(0))
-        .setFooter({ text: `Page 1 of ${totalPages}` })
-        .setColor(0x9b59b6);
+      .setTitle('House Points Log')
+      .setDescription(buildPage(0))
+      .setFooter({ text: `Page 1 of ${totalPages}` })
+      .setColor(0x9b59b6);
 
-    // send with Previous/Next buttons
-    await interaction.reply({
-        embeds: [embed],
-        components: [{
-            type: 1,
-            components: [
-                { type: 2, style: 2, label: 'Previous', custom_id: 'log_prev', disabled: true },
-                { type: 2, style: 2, label: 'Next', custom_id: 'log_next', disabled: totalPages <= 1 }
-            ]
-        }],
-        flags: 64
+    await interaction.editReply({
+      embeds: [embed],
+      components: [{
+        type: 1,
+        components: [
+          { type: 2, style: 2, label: 'Previous', custom_id: 'log_prev', disabled: true },
+          { type: 2, style: 2, label: 'Next', custom_id: 'log_next', disabled: totalPages <= 1 }
+        ]
+      }]
     });
 
-    // listen for button clicks
     const collector = interaction.channel.createMessageComponentCollector({ time: 60000 });
     collector.on('collect', async i => {
-        if (i.user.id !== interaction.user.id) return;
-        if (i.customId === 'log_next') currentPage++;
-        if (i.customId === 'log_prev') currentPage--;
+      if (i.user.id !== interaction.user.id) return;
+      if (i.customId === 'log_next') currentPage++;
+      if (i.customId === 'log_prev') currentPage--;
 
-        const updatedEmbed = new EmbedBuilder()
-            .setTitle('House Points Log')
-            .setDescription(buildPage(currentPage))
-            .setFooter({ text: `Page ${currentPage + 1} of ${totalPages}` })
-            .setColor(0x9b59b6);
+      const updatedEmbed = new EmbedBuilder()
+        .setTitle('House Points Log')
+        .setDescription(buildPage(currentPage))
+        .setFooter({ text: `Page ${currentPage + 1} of ${totalPages}` })
+        .setColor(0x9b59b6);
 
-        await i.update({
-            embeds: [updatedEmbed],
-            components: [{
-                type: 1,
-                components: [
-                    { type: 2, style: 2, label: 'Previous', custom_id: 'log_prev', disabled: currentPage === 0 },
-                    { type: 2, style: 2, label: 'Next', custom_id: 'log_next', disabled: currentPage === totalPages - 1 }
-                ]
-            }]
-        });
+      await i.update({
+        embeds: [updatedEmbed],
+        components: [{
+          type: 1,
+          components: [
+            { type: 2, style: 2, label: 'Previous', custom_id: 'log_prev', disabled: currentPage === 0 },
+            { type: 2, style: 2, label: 'Next', custom_id: 'log_next', disabled: currentPage === totalPages - 1 }
+          ]
+        }]
+      });
     });
- } catch (error) {
-    console.error('Error handling addpoints command:', error);
+  } catch (error) {
+    console.error('Error handling pointslog command:', error);
   }
 }
 
