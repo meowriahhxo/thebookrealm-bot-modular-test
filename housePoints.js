@@ -54,7 +54,7 @@ const addPointsCommand = new SlashCommandBuilder()
 
 // handles the /addpoints command
 async function handleAddPoints(interaction) {
-
+  try {
     // check if the user has the mod role
     const modMember = await interaction.guild.members.fetch(interaction.user.id);
     if (!modMember.roles.cache.has(process.env.MOD_ROLE_ID)) {
@@ -83,7 +83,7 @@ async function handleAddPoints(interaction) {
     // figure out which house the member belongs to
     let house = null;
     console.log('Member roles:', [...member.roles.cache.keys()]);
-console.log('House role IDs:', houseRoles);
+    console.log('House role IDs:', houseRoles);
     for (const [houseName, roleId] of Object.entries(houseRoles)) {
         if (member.roles.cache.has(roleId)) {
             house = houseName;
@@ -119,11 +119,15 @@ console.log('House role IDs:', houseRoles);
     const entryId = result.rows[0].id;
 
     // post public announcement in the category spam channel
-    const announcementChannel = await interaction.client.channels.fetch(categoryChannels[category]);
-    await announcementChannel.send(
+    try {
+      const announcementChannel = await interaction.client.channels.fetch(categoryChannels[category]);
+      await announcementChannel.send(
         `${house} - ${targetUser.username} - ${category} - ${points} points` +
         (note ? `\n*📝 ${note}*` : '')
-    );
+      );
+    } catch (e) {
+      console.log(`Could not post to announcement channel for ${category} — skipping`);
+    }
 
     // send ephemeral confirmation to the mod
     await interaction.reply({
@@ -132,6 +136,12 @@ console.log('House role IDs:', houseRoles);
             `\n✅ Logged - Entry ID: \`${entryId}\``,
         flags: 64
     });
+  } catch (error) {
+    console.error('Error handling addpoints command:', error);
+    try {
+      await interaction.reply({ content: 'Something went wrong processing this command.', flags: 64 });
+    } catch (e) {}
+  }
 }
 
 // /removepoints command definition
@@ -145,6 +155,7 @@ const removePointsCommand = new SlashCommandBuilder()
 
             // handles the /removepoints command
 async function handleRemovePoints(interaction) {
+  try {
     // check if the user has the mod role
     const modMember = await interaction.guild.members.fetch(interaction.user.id);
     if (!modMember.roles.cache.has(process.env.MOD_ROLE_ID)) {
@@ -178,6 +189,12 @@ async function handleRemovePoints(interaction) {
         content: `🗑️ Removed entry \`${id}\` — ${entry.house} - ${entry.username} - ${entry.category} - ${entry.points} points`,
         flags: 64
     });
+  } catch (error) {
+    console.error('Error handling removepoints command:', error);
+    try {
+      await interaction.reply({ content: 'Something went wrong processing this command.', flags: 64 });
+    } catch (e) {}
+  }
 }
 
 // /pointslog command definition
@@ -187,6 +204,7 @@ const pointsLogCommand = new SlashCommandBuilder()
 
 // handles the /pointslog command
 async function handlePointsLog(interaction) {
+  try {
     // check if the user has the mod role
     const modMember = await interaction.guild.members.fetch(interaction.user.id);
     if (!modMember.roles.cache.has(process.env.MOD_ROLE_ID)) {
@@ -260,6 +278,12 @@ async function handlePointsLog(interaction) {
             }]
         });
     });
+  } catch (error) {
+    console.error('Error handling pointslog command:', error);
+    try {
+      await interaction.reply({ content: 'Something went wrong processing this command.', flags: 64 });
+    } catch (e) {}
+  }
 }
 
 // export commands and handlers for use in index.js
