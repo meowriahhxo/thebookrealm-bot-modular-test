@@ -82,6 +82,8 @@ async function handleAddPoints(interaction) {
 
     // figure out which house the member belongs to
     let house = null;
+    console.log('Member roles:', [...member.roles.cache.keys()]);
+console.log('House role IDs:', houseRoles);
     for (const [houseName, roleId] of Object.entries(houseRoles)) {
         if (member.roles.cache.has(roleId)) {
             house = houseName;
