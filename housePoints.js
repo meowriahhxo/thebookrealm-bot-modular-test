@@ -27,16 +27,6 @@ const addPointsCommand = new SlashCommandBuilder()
             .setDescription('The member to award points to')
             .setRequired(false))
     .addStringOption(option =>
-        option.setName('house')
-            .setDescription('Award points to a whole house instead of a specific user')
-            .setRequired(false)
-            .addChoices(
-                { name: 'Asphodel', value: 'Asphodel' },
-                { name: 'Dreanni', value: 'Dreanni' },
-                { name: 'Laiidon', value: 'Laiidon' },
-                { name: 'Zeldarian', value: 'Zeldarian' }
-            ))
-    .addStringOption(option =>
         option.setName('category')
             .setDescription('The category of points')
             .setRequired(true)
@@ -58,6 +48,16 @@ const addPointsCommand = new SlashCommandBuilder()
             .setDescription('Number of points to award')
             .setRequired(true))
     .addStringOption(option =>
+        option.setName('house')
+            .setDescription('Award points to a whole house instead of a specific user')
+            .setRequired(false)
+            .addChoices(
+                { name: 'Asphodel', value: 'Asphodel' },
+                { name: 'Dreanni', value: 'Dreanni' },
+                { name: 'Laiidon', value: 'Laiidon' },
+                { name: 'Zeldarian', value: 'Zeldarian' }
+            ))
+    .addStringOption(option =>
         option.setName('note')
             .setDescription('Optional note about why points are being awarded')
             .setRequired(false));
@@ -73,29 +73,49 @@ async function handleAddPoints(interaction) {
     }
 
     const targetUser = interaction.options.getUser('user');
+    const houseOption = interaction.options.getString('house');
     const category = interaction.options.getString('category');
     const points = interaction.options.getInteger('points');
     const note = interaction.options.getString('note');
 
-    const member = await interaction.guild.members.fetch(targetUser.id);
-
-    const houseRoles = {
-      'Asphodel': process.env.ASPHODEL_ROLE_ID,
-      'Dreanni': process.env.DREANNI_ROLE_ID,
-      'Laiidon': process.env.LAIIDON_ROLE_ID,
-      'Zeldarian': process.env.ZELDARIAN_ROLE_ID
-    };
-
-    let house = null;
-    for (const [houseName, roleId] of Object.entries(houseRoles)) {
-      if (member.roles.cache.has(roleId)) {
-        house = houseName;
-        break;
-      }
+    // must provide either a user or a house
+    if (!targetUser && !houseOption) {
+      return interaction.editReply({ content: 'Please provide either a user or a house to award points to.' });
     }
 
-    if (!house) {
-      return interaction.editReply({ content: `${targetUser.username} doesn't have a house role assigned yet!` });
+    let house;
+    let username;
+    let userId;
+
+    if (targetUser) {
+      // user provided — look up their house from their roles
+      const member = await interaction.guild.members.fetch(targetUser.id);
+      const houseRoles = {
+        'Asphodel': process.env.ASPHODEL_ROLE_ID,
+        'Dreanni': process.env.DREANNI_ROLE_ID,
+        'Laiidon': process.env.LAIIDON_ROLE_ID,
+        'Zeldarian': process.env.ZELDARIAN_ROLE_ID
+      };
+
+      house = null;
+      for (const [houseName, roleId] of Object.entries(houseRoles)) {
+        if (member.roles.cache.has(roleId)) {
+          house = houseName;
+          break;
+        }
+      }
+
+      if (!house) {
+        return interaction.editReply({ content: `${targetUser.username} doesn't have a house role assigned yet!` });
+      }
+
+      username = targetUser.username;
+      userId = targetUser.id;
+    } else {
+      // house provided directly — no specific user
+      house = houseOption;
+      username = `House ${houseOption}`;
+      userId = null;
     }
 
     const result = await pool.query(
@@ -103,8 +123,8 @@ async function handleAddPoints(interaction) {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id`,
       [
-        targetUser.id,
-        targetUser.username,
+        userId,
+        username,
         house,
         category,
         points,
@@ -120,17 +140,17 @@ async function handleAddPoints(interaction) {
     try {
       const announcementChannel = await interaction.client.channels.fetch(categoryChannels[category]);
       await announcementChannel.send(
-        `${house} - ${targetUser.username} - ${category} - ${points} points` +
+        `${house} - ${username} - ${category} - ${points} points` +
         (note ? `\n*📝 ${note}*` : '')
       );
     } catch (e) {
       console.log(`Could not post to announcement channel for ${category} — skipping`);
     }
 
-    console.log(`[addpoints] ${interaction.user.username} added ${points} points to ${targetUser.username} (${house}) for ${category}`);
+    console.log(`[addpoints] ${interaction.user.username} added ${points} points to ${username} (${house}) for ${category}`);
 
     await interaction.editReply({
-      content: `${house} - ${targetUser.username} - ${category} - ${points} points` +
+      content: `${house} - ${username} - ${category} - ${points} points` +
         (note ? `\n*📝 ${note}*` : '') +
         `\n✅ Logged - Entry ID: \`${entryId}\``
     });
