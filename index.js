@@ -436,11 +436,12 @@ client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
   // ---- /leaderboard ----
- if (interaction.commandName === 'leaderboard') {
+if (interaction.commandName === 'leaderboard') {
   try {
+    await interaction.deferReply();
     const housePoints = await leaderboard.getSheetData();
     const embed = leaderboard.buildLeaderboardEmbed(housePoints);
-    await interaction.reply({ embeds: [embed] });
+    await interaction.editReply({ embeds: [embed] });
   } catch (error) {
     console.error('Error handling leaderboard command:', error);
   }

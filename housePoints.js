@@ -1,13 +1,7 @@
 // housePoints.js — handles /addpoints, /removepoints, and /pointslog commands
 
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { Pool } = require('pg');
-
-// database connection
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
-});
+const { pool } = require('./db');
 
 // maps each point category to its announcement channel
 const categoryChannels = {
