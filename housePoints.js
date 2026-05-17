@@ -171,7 +171,7 @@ const removePointsCommand = new SlashCommandBuilder()
 // handles the /removepoints command
 async function handleRemovePoints(interaction) {
   try {
-    await interaction.deferReply({ flags: 64 });
+    await interaction.deferReply();
 
     const modMember = await interaction.guild.members.fetch(interaction.user.id);
     if (!modMember.roles.cache.has(process.env.MOD_ROLE_ID)) {
@@ -207,7 +207,7 @@ const pointsLogCommand = new SlashCommandBuilder()
 // handles the /pointslog command
 async function handlePointsLog(interaction) {
   try {
-    await interaction.deferReply({ flags: 64 });
+    await interaction.deferReply();
 
     const modMember = await interaction.guild.members.fetch(interaction.user.id);
     if (!modMember.roles.cache.has(process.env.MOD_ROLE_ID)) {
@@ -250,7 +250,11 @@ async function handlePointsLog(interaction) {
       }]
     });
 
-    const collector = interaction.channel.createMessageComponentCollector({ time: 60000 });
+    const message = await interaction.fetchReply();
+const collector = message.createMessageComponentCollector({
+  filter: i => i.user.id === interaction.user.id,
+  time: 60000
+});
     collector.on('collect', async i => {
       if (i.user.id !== interaction.user.id) return;
       if (i.customId === 'log_next') currentPage++;
