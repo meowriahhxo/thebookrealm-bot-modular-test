@@ -138,9 +138,6 @@ async function handleAddPoints(interaction) {
     });
   } catch (error) {
     console.error('Error handling addpoints command:', error);
-    try {
-      await interaction.reply({ content: 'Something went wrong processing this command.', flags: 64 });
-    } catch (e) {}
   }
 }
 
@@ -189,11 +186,8 @@ async function handleRemovePoints(interaction) {
         content: `🗑️ Removed entry \`${id}\` — ${entry.house} - ${entry.username} - ${entry.category} - ${entry.points} points`,
         flags: 64
     });
-  } catch (error) {
-    console.error('Error handling removepoints command:', error);
-    try {
-      await interaction.reply({ content: 'Something went wrong processing this command.', flags: 64 });
-    } catch (e) {}
+ } catch (error) {
+    console.error('Error handling addpoints command:', error);
   }
 }
 
@@ -278,11 +272,8 @@ async function handlePointsLog(interaction) {
             }]
         });
     });
-  } catch (error) {
-    console.error('Error handling pointslog command:', error);
-    try {
-      await interaction.reply({ content: 'Something went wrong processing this command.', flags: 64 });
-    } catch (e) {}
+ } catch (error) {
+    console.error('Error handling addpoints command:', error);
   }
 }
 
