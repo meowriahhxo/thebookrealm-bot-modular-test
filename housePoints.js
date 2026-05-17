@@ -68,6 +68,8 @@ async function handleAddPoints(interaction) {
     await interaction.deferReply({ flags: 64 });
 
     const modMember = await interaction.guild.members.fetch(interaction.user.id);
+    console.log('MOD_ROLE_ID:', process.env.MOD_ROLE_ID);
+console.log('User roles:', [...modMember.roles.cache.keys()]);
     if (!modMember.roles.cache.has(process.env.MOD_ROLE_ID)) {
       return interaction.editReply({ content: 'You do not have permission to use this command.' });
     }
