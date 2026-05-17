@@ -22,10 +22,6 @@ const categoryChannels = {
 const addPointsCommand = new SlashCommandBuilder()
     .setName('addpoints')
     .setDescription('Add house points for a member or a whole house')
-    .addUserOption(option =>
-        option.setName('user')
-            .setDescription('The member to award points to')
-            .setRequired(false))
     .addStringOption(option =>
         option.setName('category')
             .setDescription('The category of points')
@@ -47,6 +43,10 @@ const addPointsCommand = new SlashCommandBuilder()
         option.setName('points')
             .setDescription('Number of points to award')
             .setRequired(true))
+    .addUserOption(option =>
+        option.setName('user')
+            .setDescription('The member to award points to')
+            .setRequired(false))
     .addStringOption(option =>
         option.setName('house')
             .setDescription('Award points to a whole house instead of a specific user')

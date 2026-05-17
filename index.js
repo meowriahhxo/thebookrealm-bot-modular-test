@@ -997,8 +997,13 @@ if (interaction.commandName === 'leaderboard') {
       if (sprintEnded && allSubmitted && Object.keys(sprint.finalTimes).length > 0) {
         await postLeaderboard(channelId, interaction.guild);
       }
-    } catch (error) {
+} catch (error) {
       console.error('Error handling final command:', error);
+      try {
+        await interaction.editReply({ content: 'Something went wrong submitting your time. Please try again or contact a mod.' });
+      } catch {
+        await interaction.reply({ content: 'Something went wrong submitting your time. Please try again or contact a mod.', flags: 64 });
+      }
     }
   }
 
