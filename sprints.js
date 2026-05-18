@@ -1,4 +1,3 @@
-const { google } = require('googleapis');
 const { monthNames, channelSprintTypes, sprintVerbs, sprintHappyVerbs, fixedDurations, sprintRoles, sprintSpamThreads, getSprintEmojis } = require('./constants');
 const { pool, saveActiveSprint, savePendingSprint, saveScheduledSprint, deleteActiveSprint, deletePendingSprint, deleteScheduledSprint, saveEndingSprint, deleteEndingSprint, saveSprintResult } = require('./db');
 
@@ -16,7 +15,6 @@ const scheduledSprints = {};
 const cooldowns = {};
 
 // ---- DELAY HELPER ----
-// Used to avoid hitting the 60 writes/minute quota
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -270,8 +268,8 @@ async function postLeaderboard(channelId, guild) {
     leaderboard += `\nThanks for joining us. You can use the \`/sprint\` command to start another sprint!\n\n-# If your minutes total is not correct on the leaderboard or if the bot has **not** reacted to this post (please give it 2 minutes to process the data), please tag the Keepers of the Realm role to have it adjusted!\n\n`;
 
     // 1. Save to DB FIRST — canonical records persisted before anything else
-    // Generate one UUID per sprint instance — used as unique constraint to prevent duplicate writes
     if (sprint.type === 'Tall Tomes Sprint' || sprint.type === 'Short Stacks Sprint' || sprint.type === 'Readathon Sprint') {
+      // Generate one UUID per sprint instance — used as unique constraint to prevent duplicate writes
       const { randomUUID } = require('crypto');
       const sprintInstanceId = randomUUID();
 
@@ -307,6 +305,17 @@ async function postLeaderboard(channelId, guild) {
           }
         }
       }
+    } else if (sprint.type === 'Study Sprint' || sprint.type === 'Writing Sprint' || sprint.type === 'Art Sprint') {
+      // Creative sprints go to house_points table instead of sprint_results
+      const creativeSuccess = await saveCreativeSprintToDB(sprint.finalTimes, guild, sprint.type, channelId);
+      if (!creativeSuccess) {
+        try {
+          const sprintChannel = await client.channels.fetch(process.env.SPRINT_SHENANIGANS_CHANNEL_ID);
+          await sprintChannel.send(`⚠️ **DB Write Failed**\nSprint: ${sprint.type}\nNo results were saved successfully.`);
+        } catch (alertError) {
+          console.error('[postLeaderboard] Failed to send creative sprint DB alert:', alertError);
+        }
+      }
     }
 
     // 2. Send leaderboard message
@@ -331,7 +340,7 @@ async function postLeaderboard(channelId, guild) {
     // 3. Clean up sprint state
     await cleanupSprint(channelId);
 
-    // 4. React and post to spam channel — no longer gated behind Sheets write
+    // 4. React and post to spam channel
     try {
       for (const msg of allMessages) {
         await msg.react('<:i_got:1506024806460428460>');
@@ -361,277 +370,77 @@ async function postLeaderboard(channelId, guild) {
   }
 }
 
-// ---- SPRINT SHEETS FUNCTIONS ----
-async function writeCreativeSprints(sprintResults, guild, sprintType) {
-  try {
-    const auth = await getAuth();
-    const sheets = google.sheets({ version: 'v4', auth });
+// ---- SAVE CREATIVE SPRINT TO DB ----
+// Writes study/writing/art sprint results to house_points table, one row per participant.
+// Uses a sprint_instance_id UUID as a unique constraint to prevent duplicate writes.
+// Note field contains all participants and their minutes for easy reference.
+async function saveCreativeSprintToDB(sprintResults, guild, sprintType, channelId) {
+  const { randomUUID } = require('crypto');
+  const sprintInstanceId = randomUUID();
 
-    const sprintPointsCells = {
-      'Writing Sprint': { Asphodel: 'B7', Dreanni: 'C7', Laiidon: 'D7', Zeldarian: 'E7' },
-      'Study Sprint':   { Asphodel: 'B8', Dreanni: 'C8', Laiidon: 'D8', Zeldarian: 'E8' },
-      'Art Sprint':     { Asphodel: 'B9', Dreanni: 'C9', Laiidon: 'D9', Zeldarian: 'E9' }
-    };
+  const houseRoles = {
+    [process.env.ASPHODEL_ROLE_ID]: 'Asphodel',
+    [process.env.DREANNI_ROLE_ID]: 'Dreanni',
+    [process.env.LAIIDON_ROLE_ID]: 'Laiidon',
+    [process.env.ZELDARIAN_ROLE_ID]: 'Zeldarian'
+  };
 
-    const houseRoles = {
-      [process.env.ASPHODEL_ROLE_ID]: 'Asphodel',
-      [process.env.DREANNI_ROLE_ID]: 'Dreanni',
-      [process.env.LAIIDON_ROLE_ID]: 'Laiidon',
-      [process.env.ZELDARIAN_ROLE_ID]: 'Zeldarian'
-    };
+  // Build the note — one line per participant, used on every row
+  const noteLines = [];
+  for (const [userId, minutes] of Object.entries(sprintResults)) {
+    let member;
+    try {
+      member = await guild.members.fetch(userId);
+    } catch (e) {
+      console.error(`[saveCreativeSprintToDB] Could not fetch member ${userId} for note`);
+      continue;
+    }
+    let house = null;
+    for (const [roleId, houseName] of Object.entries(houseRoles)) {
+      if (member.roles.cache.has(roleId)) { house = houseName; break; }
+    }
+    if (!house) continue;
+    noteLines.push(`${house} - ${member.displayName} - ${minutes} min`);
+  }
+  const note = noteLines.join('\n');
 
-    const houseTotals = { Asphodel: 0, Dreanni: 0, Laiidon: 0, Zeldarian: 0 };
+  // Write one row per participant to house_points
+  let dbWriteSucceeded = false;
+  for (const [userId, minutes] of Object.entries(sprintResults)) {
+    let member;
+    try {
+      member = await guild.members.fetch(userId);
+    } catch (e) {
+      console.error(`[saveCreativeSprintToDB] Could not fetch member ${userId}`);
+      continue;
+    }
 
-    for (const [userId, minutes] of Object.entries(sprintResults)) {
-      let member;
+    let house = null;
+    for (const [roleId, houseName] of Object.entries(houseRoles)) {
+      if (member.roles.cache.has(roleId)) { house = houseName; break; }
+    }
+    if (!house) continue;
+
+    try {
+      await pool.query(
+        `INSERT INTO house_points (user_id, username, house, category, points, added_by, channel_id, note, created_at, sprint_instance_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9)`,
+        [userId, member.displayName, house, sprintType, minutes, 'Digby', channelId, note, sprintInstanceId]
+      );
+      console.log(`[DB] Saved creative sprint: ${member.displayName} (${userId}) — ${minutes} min — ${house} — ${sprintType}`);
+      dbWriteSucceeded = true;
+    } catch (error) {
+      console.error(`[saveCreativeSprintToDB] Error saving ${userId}:`, error);
       try {
-        member = await guild.members.fetch(userId);
-      } catch (e) {
-        console.log(`Could not fetch member ${userId} for ${sprintType}`);
-        continue;
+        const sprintChannel = await client.channels.fetch(process.env.SPRINT_SHENANIGANS_CHANNEL_ID);
+        await sprintChannel.send(`⚠️ **DB Write Failed**\nUser: <@${userId}>\nSprint type: ${sprintType}\nMinutes: ${minutes}\nError: ${error.message}`);
+      } catch (alertError) {
+        console.error('[saveCreativeSprintToDB] Failed to send DB alert:', alertError);
       }
-
-      let house = null;
-      for (const [roleId, houseName] of Object.entries(houseRoles)) {
-        if (member.roles.cache.has(roleId)) {
-          house = houseName;
-          break;
-        }
-      }
-
-      if (!house) {
-        console.log(`No house found for ${userId} in ${sprintType}`);
-        continue;
-      }
-      houseTotals[house] += minutes;
     }
-
-    const now = new Date();
-    const easternTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-    const tabName = `${monthNames[easternTime.getMonth()]} ${easternTime.getFullYear()}`;
-
-    for (const [house, minutes] of Object.entries(houseTotals)) {
-      if (minutes === 0) continue;
-      const cell = sprintPointsCells[sprintType][house];
-      const response = await sheets.spreadsheets.values.get({
-        spreadsheetId: process.env.POINTS_SPREADSHEET_ID,
-        range: `${tabName}!${cell}`,
-        valueRenderOption: 'UNFORMATTED_VALUE'
-      });
-      const current = parseFloat(response.data.values?.[0]?.[0]) || 0;
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: process.env.POINTS_SPREADSHEET_ID,
-        range: `${tabName}!${cell}`,
-        valueInputOption: 'RAW',
-        requestBody: { values: [[current + minutes]] }
-      });
-      console.log(`Updated ${house} in ${tabName} for ${sprintType} (+${minutes} minutes)`);
-
-      // Throttle writes to avoid hitting Google Sheets quota
-      await delay(500);
-    }
-    console.log(`${sprintType} results fully written to Points spreadsheet!`);
-    return true;
-  } catch (error) {
-    console.error(`Error writing ${sprintType} to Points spreadsheet:`, error);
-    return false;
   }
-}
 
-async function writeReadathonToSheets(sprintResults, guild, sprintNumber) {
-  try {
-    const auth = await getAuth();
-    const sheets = google.sheets({ version: 'v4', auth });
-
-    const now = new Date();
-    const easternTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-    const tabName = `${monthNames[easternTime.getMonth()]} ${easternTime.getFullYear()}`;
-    const sprintCol = String.fromCharCode(65 + 3 + (sprintNumber - 1));
-
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: process.env.READATHON_LEADERBOARD_ID,
-      range: `${tabName}!A:C`,
-    });
-
-    const rows = response.data.values || [];
-
-    const houseRoles = {
-      [process.env.ASPHODEL_ROLE_ID]: 'Asphodel',
-      [process.env.DREANNI_ROLE_ID]: 'Dreanni',
-      [process.env.LAIIDON_ROLE_ID]: 'Laiidon',
-      [process.env.ZELDARIAN_ROLE_ID]: 'Zeldarian'
-    };
-
-    for (const [userId, minutes] of Object.entries(sprintResults)) {
-      let member;
-      try {
-        member = await guild.members.fetch(userId);
-      } catch (e) {
-        console.log(`Could not fetch member ${userId} for Readathon Sprint #${sprintNumber}`);
-        await delay(1000);
-        continue;
-      }
-
-      let house = null;
-      for (const [roleId, houseName] of Object.entries(houseRoles)) {
-        if (member.roles.cache.has(roleId)) {
-          house = houseName;
-          break;
-        }
-      }
-
-      if (!house) {
-        console.log(`No house found for ${userId} in Readathon Sprint #${sprintNumber}`);
-        await delay(1000);
-        continue;
-      }
-
-      const displayName = member.displayName;
-      const existingRowIndex = rows.findIndex(row => row[0] === userId);
-
-      if (existingRowIndex !== -1) {
-        const rowNumber = existingRowIndex + 1;
-        await sheets.spreadsheets.values.update({
-          spreadsheetId: process.env.READATHON_LEADERBOARD_ID,
-          range: `${tabName}!${sprintCol}${rowNumber}`,
-          valueInputOption: 'RAW',
-          requestBody: { values: [[minutes]] }
-        });
-        console.log(`Updated ${displayName} (${userId}) in Readathon Sprint #${sprintNumber} — ${minutes} minutes`);
-      } else {
-        await sheets.spreadsheets.values.append({
-          spreadsheetId: process.env.READATHON_LEADERBOARD_ID,
-          range: `${tabName}!A:C`,
-          valueInputOption: 'RAW',
-          requestBody: { values: [[userId, house, displayName]] }
-        });
-
-        const newResponse = await sheets.spreadsheets.values.get({
-          spreadsheetId: process.env.READATHON_LEADERBOARD_ID,
-          range: `${tabName}!A:C`,
-        });
-        const newRows = newResponse.data.values || [];
-        const newRowIndex = newRows.findIndex(row => row[0] === userId);
-        if (newRowIndex !== -1) {
-          await sheets.spreadsheets.values.update({
-            spreadsheetId: process.env.READATHON_LEADERBOARD_ID,
-            range: `${tabName}!${sprintCol}${newRowIndex + 1}`,
-            valueInputOption: 'RAW',
-            requestBody: { values: [[minutes]] }
-          });
-        }
-        console.log(`Added ${displayName} (${userId}) to Readathon Sprint #${sprintNumber} — ${minutes} minutes`);
-      }
-
-      // Throttle writes to avoid hitting Google Sheets quota (60 writes/minute)
-      await delay(1000);
-    }
-    console.log(`Readathon Sprint #${sprintNumber} results fully written to Readathon Leaderboard!`);
-    return true;
-  } catch (error) {
-    console.error('Error writing to Readathon Leaderboard:', error);
-    return false;
-  }
-}
-
-async function writeSprintToSheets(sprintResults, guild, sprintType, sprintNumber = null) {
-  try {
-    if (sprintType === 'Writing Sprint' || sprintType === 'Art Sprint' || sprintType === 'Study Sprint') {
-      return await writeCreativeSprints(sprintResults, guild, sprintType);
-    }
-
-    let readathonSuccess = true;
-    if (sprintType === 'Readathon Sprint') {
-      readathonSuccess = await writeReadathonToSheets(sprintResults, guild, sprintNumber);
-    }
-
-    if (sprintType !== 'Tall Tomes Sprint' && sprintType !== 'Short Stacks Sprint' && sprintType !== 'Readathon Sprint') {
-      return false;
-    }
-
-    const auth = await getAuth();
-    const sheets = google.sheets({ version: 'v4', auth });
-
-    const now = new Date();
-    const easternTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-    const tabName = `${monthNames[easternTime.getMonth()]} ${easternTime.getFullYear()}`;
-
-    for (const targetTab of [tabName, '2026 Overall']) {
-      const response = await sheets.spreadsheets.values.get({
-        spreadsheetId: process.env.SPRINT_LEADERBOARD_ID,
-        range: `${targetTab}!A:E`,
-        valueRenderOption: 'UNFORMATTED_VALUE'
-      });
-
-      const rows = response.data.values || [];
-
-      for (const [userId, minutes] of Object.entries(sprintResults)) {
-        let member;
-        try {
-          member = await guild.members.fetch(userId);
-        } catch (e) {
-          console.log(`Could not fetch member ${userId} for ${sprintType} in ${targetTab}`);
-          await delay(1000);
-          continue;
-        }
-
-        const houseRoles = {
-          [process.env.ASPHODEL_ROLE_ID]: 'Asphodel',
-          [process.env.DREANNI_ROLE_ID]: 'Dreanni',
-          [process.env.LAIIDON_ROLE_ID]: 'Laiidon',
-          [process.env.ZELDARIAN_ROLE_ID]: 'Zeldarian'
-        };
-
-        let house = null;
-        for (const [roleId, houseName] of Object.entries(houseRoles)) {
-          if (member.roles.cache.has(roleId)) {
-            house = houseName;
-            break;
-          }
-        }
-
-        if (!house) {
-          console.log(`No house found for ${userId} in ${sprintType} — ${targetTab}`);
-          await delay(1000);
-          continue;
-        }
-
-        const displayName = member.displayName;
-        const existingRowIndex = rows.findIndex(row => row[0] === userId);
-
-        if (existingRowIndex !== -1) {
-          const currentMinutes = parseInt(rows[existingRowIndex][3]) || 0;
-          const currentSprints = parseInt(rows[existingRowIndex][4]) || 0;
-          const rowNumber = existingRowIndex + 1;
-
-          await sheets.spreadsheets.values.update({
-            spreadsheetId: process.env.SPRINT_LEADERBOARD_ID,
-            range: `${targetTab}!D${rowNumber}:E${rowNumber}`,
-            valueInputOption: 'RAW',
-            requestBody: { values: [[currentMinutes + minutes, currentSprints + 1]] }
-          });
-          console.log(`Updated ${displayName} (${userId}) in ${targetTab} — +${minutes} minutes`);
-        } else {
-          await sheets.spreadsheets.values.append({
-            spreadsheetId: process.env.SPRINT_LEADERBOARD_ID,
-            range: `${targetTab}!A:E`,
-            valueInputOption: 'RAW',
-            requestBody: { values: [[userId, house, displayName, minutes, 1]] }
-          });
-          console.log(`Added ${displayName} (${userId}) to ${targetTab} — ${minutes} minutes`);
-        }
-
-        // Throttle writes to avoid hitting Google Sheets quota (60 writes/minute)
-        await delay(1000);
-      }
-    }
-
-    console.log(`[SHEETS WRITE COMPLETE] ${tabName} and 2026 Overall — ${Object.keys(sprintResults).length} users written`);
-    return readathonSuccess;
-  } catch (error) {
-    console.error('Error writing to Google Sheets:', error);
-    return false;
-  }
+  return dbWriteSucceeded;
 }
 
 // ---- RESTORE SPRINT STATE ----
@@ -865,7 +674,6 @@ async function restoreSprintState() {
     for (const row of endingResult.rows) {
       const msUntilLeaderboard = row.leaderboard_at - Date.now();
 
-      // If the leaderboard time has already passed, post it now
       if (msUntilLeaderboard <= 0) {
         if (Object.keys(row.final_times).length > 0) {
           activeSprints[row.channel_id] = {
@@ -885,7 +693,6 @@ async function restoreSprintState() {
         continue;
       }
 
-      // Otherwise restore the sprint and set a timer to post the leaderboard
       activeSprints[row.channel_id] = {
         type: row.type,
         duration: row.duration,
