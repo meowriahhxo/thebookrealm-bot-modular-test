@@ -245,17 +245,30 @@ async function postLeaderboard(channelId, guild) {
     leaderboard += `\nMinutes Read: **${totalTime} minutes** in a **${sprint.duration} minute** sprint!\n`;
     leaderboard += `\nThanks for joining us. You can use the \`/sprint\` command to start another sprint!\n\n-# If your minutes total is not correct on the leaderboard or if the bot has **not** reacted to this post (please give it 2 minutes to process the data), please tag the Keepers of the Realm role to have it adjusted!\n\n`;
 
-    // 1. Save to DB FIRST — canonical records persisted before anything else
+// 1. Save to DB FIRST — canonical records persisted before anything else
 if (sprint.type === 'Tall Tomes Sprint' || sprint.type === 'Short Stacks Sprint' || sprint.type === 'Readathon Sprint') {
   for (const [userId, minutes] of Object.entries(sprint.finalTimes)) {
     try {
       let displayName = userId;
+      let house = null;
       try {
         const member = await guild.members.fetch(userId);
         displayName = member.displayName;
+        const houseRoles = {
+          [process.env.ASPHODEL_ROLE_ID]: 'Asphodel',
+          [process.env.DREANNI_ROLE_ID]: 'Dreanni',
+          [process.env.LAIIDON_ROLE_ID]: 'Laiidon',
+          [process.env.ZELDARIAN_ROLE_ID]: 'Zeldarian'
+        };
+        for (const [roleId, houseName] of Object.entries(houseRoles)) {
+          if (member.roles.cache.has(roleId)) {
+            house = houseName;
+            break;
+          }
+        }
       } catch {}
-      await saveSprintResult(userId, guild.id, sprint.type, minutes);
-      console.log(`[DB] Saved: ${displayName} (${userId}) — ${minutes} minutes`);
+      await saveSprintResult(userId, guild.id, sprint.type, minutes, displayName, house);
+      console.log(`[DB] Saved: ${displayName} (${userId}) — ${minutes} minutes — ${house}`);
     } catch (error) {
       console.error('Error saving sprint result to database:', error);
     }

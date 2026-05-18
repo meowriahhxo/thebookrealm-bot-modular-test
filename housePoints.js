@@ -23,6 +23,16 @@ const addPointsCommand = new SlashCommandBuilder()
     .setName('addpoints')
     .setDescription('Add house points for a member or a whole house')
     .addStringOption(option =>
+        option.setName('house')
+            .setDescription('The house to award points to')
+            .setRequired(true)
+            .addChoices(
+                { name: 'Asphodel', value: 'Asphodel' },
+                { name: 'Dreanni', value: 'Dreanni' },
+                { name: 'Laiidon', value: 'Laiidon' },
+                { name: 'Zeldarian', value: 'Zeldarian' }
+            ))
+    .addStringOption(option =>
         option.setName('category')
             .setDescription('The category of points')
             .setRequired(true)
@@ -45,18 +55,8 @@ const addPointsCommand = new SlashCommandBuilder()
             .setRequired(true))
     .addUserOption(option =>
         option.setName('user')
-            .setDescription('The member to award points to')
+            .setDescription('The specific member to award points to (optional)')
             .setRequired(false))
-    .addStringOption(option =>
-        option.setName('house')
-            .setDescription('Award points to a whole house instead of a specific user')
-            .setRequired(false)
-            .addChoices(
-                { name: 'Asphodel', value: 'Asphodel' },
-                { name: 'Dreanni', value: 'Dreanni' },
-                { name: 'Laiidon', value: 'Laiidon' },
-                { name: 'Zeldarian', value: 'Zeldarian' }
-            ))
     .addStringOption(option =>
         option.setName('note')
             .setDescription('Optional note about why points are being awarded')
@@ -70,48 +70,18 @@ async function handleAddPoints(interaction) {
       return interaction.reply({ content: 'You do not have permission to use this command.', flags: 64 });
     }
 
-    const targetUser = interaction.options.getUser('user');
-    const houseOption = interaction.options.getString('house');
+    const house = interaction.options.getString('house');
     const category = interaction.options.getString('category');
     const points = interaction.options.getInteger('points');
+    const targetUser = interaction.options.getUser('user');
     const note = interaction.options.getString('note');
 
-    if (!targetUser && !houseOption) {
-      return interaction.reply({ content: 'Please provide either a user or a house to award points to.', flags: 64 });
-    }
-
-    let house;
-    let username;
-    let userId;
-
-    if (targetUser) {
-      const member = await interaction.guild.members.fetch(targetUser.id);
-      const houseRoles = {
-        'Asphodel': process.env.ASPHODEL_ROLE_ID,
-        'Dreanni': process.env.DREANNI_ROLE_ID,
-        'Laiidon': process.env.LAIIDON_ROLE_ID,
-        'Zeldarian': process.env.ZELDARIAN_ROLE_ID
-      };
-
-      house = null;
-      for (const [houseName, roleId] of Object.entries(houseRoles)) {
-        if (member.roles.cache.has(roleId)) {
-          house = houseName;
-          break;
-        }
-      }
-
-      if (!house) {
-        return interaction.reply({ content: `${targetUser.username} doesn't have a house role assigned yet!`, flags: 64 });
-      }
-
-      username = targetUser.username;
-      userId = targetUser.id;
-    } else {
-      house = houseOption;
-      username = `House ${houseOption}`;
-      userId = null;
-    }
+if (points < 1 || points > 10000) {
+  return interaction.reply({ content: 'Points must be between 1 and 10,000.', flags: 64 });
+}
+    
+    const username = targetUser ? targetUser.username : `House ${house}`;
+    const userId = targetUser ? targetUser.id : null;
 
     // all checks passed — defer now before DB work
     await interaction.deferReply({ flags: 64 });

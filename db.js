@@ -15,16 +15,19 @@ async function initializeDatabase() {
     `);
 
     //// Note: sprint_results also has sprint_ended_at (TIMESTAMPTZ), added via ALTER TABLE
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS sprint_results (
-        id SERIAL PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        guild_id TEXT NOT NULL,
-        sprint_type TEXT NOT NULL,
-        minutes INTEGER NOT NULL,
-        sprint_date DATE NOT NULL
-      )
-    `);
+   await pool.query(`
+  CREATE TABLE IF NOT EXISTS sprint_results (
+    id SERIAL PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    guild_id TEXT NOT NULL,
+    sprint_type TEXT NOT NULL,
+    minutes INTEGER NOT NULL,
+    sprint_date DATE NOT NULL,
+    sprint_ended_at TIMESTAMPTZ,
+    username TEXT,
+    house TEXT
+  )
+`);
     await pool.query(`
   CREATE TABLE IF NOT EXISTS active_sprints (
     channel_id TEXT PRIMARY KEY,
@@ -146,6 +149,21 @@ await pool.query(`
   )
 `);
 
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS house_points (
+    id SERIAL PRIMARY KEY,
+    user_id TEXT,
+    username TEXT,
+    house TEXT,
+    category TEXT,
+    points INTEGER,
+    added_by TEXT,
+    channel_id TEXT,
+    note TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  )
+`);
+
     console.log('Database initialized!');
   } catch (error) {
     console.error('Database initialization error:', error);
@@ -175,12 +193,12 @@ async function deleteStickyMessage(channelId) {
   await pool.query('DELETE FROM sticky_messages WHERE channel_id = $1', [channelId]);
 }
 
-async function saveSprintResult(userId, guildId, sprintType, minutes) {
+async function saveSprintResult(userId, guildId, sprintType, minutes, username, house) {
   try {
     await pool.query(
-      `INSERT INTO sprint_results (user_id, guild_id, sprint_type, minutes, sprint_date, sprint_ended_at)
-       VALUES ($1, $2, $3, $4, CURRENT_DATE, NOW())`,
-      [userId, guildId, sprintType, minutes]
+      `INSERT INTO sprint_results (user_id, guild_id, sprint_type, minutes, sprint_date, sprint_ended_at, username, house)
+       VALUES ($1, $2, $3, $4, CURRENT_DATE, NOW(), $5, $6)`,
+      [userId, guildId, sprintType, minutes, username || null, house || null]
     );
   } catch (error) {
     console.error(`[saveSprintResult] FAILED to save: user=${userId} type=${sprintType} minutes=${minutes}`, error);
