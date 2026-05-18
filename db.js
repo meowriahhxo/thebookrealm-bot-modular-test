@@ -193,12 +193,12 @@ async function deleteStickyMessage(channelId) {
   await pool.query('DELETE FROM sticky_messages WHERE channel_id = $1', [channelId]);
 }
 
-async function saveSprintResult(userId, guildId, sprintType, minutes, username, house) {
+async function saveSprintResult(userId, guildId, sprintType, minutes, username, house, sprintInstanceId) {
   try {
     await pool.query(
-      `INSERT INTO sprint_results (user_id, guild_id, sprint_type, minutes, sprint_date, sprint_ended_at, username, house)
-       VALUES ($1, $2, $3, $4, CURRENT_DATE, NOW(), $5, $6)`,
-      [userId, guildId, sprintType, minutes, username || null, house || null]
+      `INSERT INTO sprint_results (user_id, guild_id, sprint_type, minutes, sprint_date, sprint_ended_at, username, house, sprint_instance_id)
+       VALUES ($1, $2, $3, $4, CURRENT_DATE, NOW(), $5, $6, $7)`,
+      [userId, guildId, sprintType, minutes, username || null, house || null, sprintInstanceId || null]
     );
   } catch (error) {
     console.error(`[saveSprintResult] FAILED to save: user=${userId} type=${sprintType} minutes=${minutes}`, error);
