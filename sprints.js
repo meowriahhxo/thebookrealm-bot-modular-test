@@ -164,12 +164,16 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
     }, (submitWindow - 2) * 60 * 1000);
 
     const allAlreadySubmitted = [...sprint.originalParticipants].every(id => sprint.submittedUsers.has(id));
-    if (allAlreadySubmitted && Object.keys(sprint.finalTimes).length > 0) {
-      await postLeaderboard(channelId, guild);
-    } else {
-      sprint.leaderboardAt = Date.now() + submitWindow * 60 * 1000;
-      sprint.finalTimer = setTimeout(() => postLeaderboard(channelId, guild), submitWindow * 60 * 1000);
-    }
+if (allAlreadySubmitted && Object.keys(sprint.finalTimes).length > 0) {
+  if (sprint.finalTimer) {
+    clearTimeout(sprint.finalTimer);
+    sprint.finalTimer = null;
+  }
+  await postLeaderboard(row.channel_id, guild);
+} else {
+  sprint.leaderboardAt = Date.now() + submitWindow * 60 * 1000;
+  sprint.finalTimer = setTimeout(() => postLeaderboard(row.channel_id, guild), submitWindow * 60 * 1000);
+}
 
   } catch (err) {
     console.error(`[Sprint ${channelId}] Error in sprint end sequence (startSprint):`, err);
@@ -236,7 +240,7 @@ try {
   const channel = await client.channels.fetch(channelId);
 
   // Small delay after all counts are in — gives any near-simultaneous calls time to be blocked by the leaderboardPosted flag before DB writes begin
-  await channel.send('✨ All counts are in! The leaderboard is on its way...');
+  await channel.send('✨ All counts are in! Finalizing the leaderboard... ✨');
   await delay(3000);
   
   const sorted = Object.entries(sprint.finalTimes).sort((a, b) => b[1] - a[1]);
@@ -292,6 +296,12 @@ try {
           console.log(`[DB] Saved: ${displayName} (${userId}) — ${minutes} minutes — ${house}`);
         } catch (error) {
           console.error('Error saving sprint result to database:', error);
+          try {
+            const sprintChannel = await client.channels.fetch(process.env.SPRINT_SHENANIGANS_CHANNEL_ID);
+            await sprintChannel.send(`⚠️ **DB Write Failed**\nUser: <@${userId}>\nSprint type: ${sprint.type}\nMinutes: ${minutes}\nError: ${error.message}`);
+          } catch (alertError) {
+            console.error('[postLeaderboard] Failed to send DB alert:', alertError);
+          }
         }
       }
     }

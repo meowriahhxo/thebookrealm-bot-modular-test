@@ -195,19 +195,9 @@ async function deleteStickyMessage(channelId) {
 
 async function saveSprintResult(userId, guildId, sprintType, minutes, username, house, sprintInstanceId) {
   try {
-    await pool.query(
-      `INSERT INTO sprint_results (user_id, guild_id, sprint_type, minutes, sprint_date, sprint_ended_at, username, house, sprint_instance_id)
-       VALUES ($1, $2, $3, $4, CURRENT_DATE, NOW(), $5, $6, $7)`,
-      [userId, guildId, sprintType, minutes, username || null, house || null, sprintInstanceId || null]
-    );
+    await pool.query(...)
   } catch (error) {
-    console.error(`[saveSprintResult] FAILED to save: user=${userId} type=${sprintType} minutes=${minutes}`, error);
-    try {
-      const sprintChannel = await client.channels.fetch(process.env.SPRINT_SHENANIGANS_CHANNEL_ID);
-      await sprintChannel.send(`⚠️ **DB Write Failed**\nUser: <@${userId}>\nSprint type: ${sprintType}\nMinutes: ${minutes}\nError: ${error.message}`);
-    } catch (alertError) {
-      console.error('[saveSprintResult] Failed to send alert:', alertError);
-    }
+    console.error(`[saveSprintResult] FAILED to save...`, error);
     throw error;
   }
 }
