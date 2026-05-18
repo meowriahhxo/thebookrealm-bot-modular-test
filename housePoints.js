@@ -65,13 +65,9 @@ const addPointsCommand = new SlashCommandBuilder()
 // handles the /addpoints command
 async function handleAddPoints(interaction) {
   try {
-    await interaction.deferReply({ flags: 64 });
-
     const modMember = await interaction.guild.members.fetch(interaction.user.id);
-    console.log('MOD_ROLE_ID:', process.env.MOD_ROLE_ID);
-console.log('User roles:', [...modMember.roles.cache.keys()]);
     if (!modMember.roles.cache.has(process.env.MOD_ROLE_ID)) {
-      return interaction.editReply({ content: 'You do not have permission to use this command.' });
+      return interaction.reply({ content: 'You do not have permission to use this command.', flags: 64 });
     }
 
     const targetUser = interaction.options.getUser('user');
@@ -80,9 +76,8 @@ console.log('User roles:', [...modMember.roles.cache.keys()]);
     const points = interaction.options.getInteger('points');
     const note = interaction.options.getString('note');
 
-    // must provide either a user or a house
     if (!targetUser && !houseOption) {
-      return interaction.editReply({ content: 'Please provide either a user or a house to award points to.' });
+      return interaction.reply({ content: 'Please provide either a user or a house to award points to.', flags: 64 });
     }
 
     let house;
@@ -90,7 +85,6 @@ console.log('User roles:', [...modMember.roles.cache.keys()]);
     let userId;
 
     if (targetUser) {
-      // user provided — look up their house from their roles
       const member = await interaction.guild.members.fetch(targetUser.id);
       const houseRoles = {
         'Asphodel': process.env.ASPHODEL_ROLE_ID,
@@ -108,17 +102,19 @@ console.log('User roles:', [...modMember.roles.cache.keys()]);
       }
 
       if (!house) {
-        return interaction.editReply({ content: `${targetUser.username} doesn't have a house role assigned yet!` });
+        return interaction.reply({ content: `${targetUser.username} doesn't have a house role assigned yet!`, flags: 64 });
       }
 
       username = targetUser.username;
       userId = targetUser.id;
     } else {
-      // house provided directly — no specific user
       house = houseOption;
       username = `House ${houseOption}`;
       userId = null;
     }
+
+    // all checks passed — defer now before DB work
+    await interaction.deferReply({ flags: 64 });
 
     const result = await pool.query(
       `INSERT INTO house_points (user_id, username, house, category, points, added_by, channel_id, note)
@@ -138,7 +134,7 @@ console.log('User roles:', [...modMember.roles.cache.keys()]);
 
     const entryId = result.rows[0].id;
 
-    // post public announcement in the category spam channel
+    // post public announcement in the category channel
     try {
       const announcementChannel = await interaction.client.channels.fetch(categoryChannels[category]);
       await announcementChannel.send(
@@ -173,17 +169,17 @@ const removePointsCommand = new SlashCommandBuilder()
 // handles the /removepoints command
 async function handleRemovePoints(interaction) {
   try {
-    await interaction.deferReply();
-
     const modMember = await interaction.guild.members.fetch(interaction.user.id);
     if (!modMember.roles.cache.has(process.env.MOD_ROLE_ID)) {
-      return interaction.editReply({ content: 'You do not have permission to use this command.' });
+      return interaction.reply({ content: 'You do not have permission to use this command.', flags: 64 });
     }
 
     const id = interaction.options.getInteger('id');
 
-    const check = await pool.query('SELECT * FROM house_points WHERE id = $1', [id]);
+    // all checks passed — defer now before DB work
+    await interaction.deferReply();
 
+    const check = await pool.query('SELECT * FROM house_points WHERE id = $1', [id]);
     if (check.rows.length === 0) {
       return interaction.editReply({ content: `❌ No entry found with ID \`${id}\`.` });
     }
@@ -209,30 +205,30 @@ const pointsLogCommand = new SlashCommandBuilder()
 // handles the /pointslog command
 async function handlePointsLog(interaction) {
   try {
-    await interaction.deferReply();
-
     const modMember = await interaction.guild.members.fetch(interaction.user.id);
     if (!modMember.roles.cache.has(process.env.MOD_ROLE_ID)) {
-      return interaction.editReply({ content: 'You do not have permission to use this command.' });
+      return interaction.reply({ content: 'You do not have permission to use this command.', flags: 64 });
     }
+
+    // all checks passed — defer now before DB work
+    await interaction.deferReply();
 
     console.log(`[pointslog] ${interaction.user.username} viewed the points log`);
 
     const result = await pool.query('SELECT * FROM house_points ORDER BY created_at DESC');
-
     const entries = result.rows;
     const pageSize = 15;
-    const totalPages = Math.ceil(entries.length / pageSize);
+    const totalPages = Math.ceil(entries.length / pageSize) || 1;
     let currentPage = 0;
 
     function buildPage(page) {
       const start = page * pageSize;
       const slice = entries.slice(start, start + pageSize);
-      const lines = slice.map(e => {
+      if (slice.length === 0) return 'No entries found.';
+      return slice.map(e => {
         const date = new Date(e.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
         return `\`${e.id}\` - ${e.house} - ${e.username} - ${e.category} - ${e.points} points - ${date} - added by ${e.added_by}`;
       }).join('\n');
-      return lines;
     }
 
     const embed = new EmbedBuilder()
@@ -253,12 +249,12 @@ async function handlePointsLog(interaction) {
     });
 
     const message = await interaction.fetchReply();
-const collector = message.createMessageComponentCollector({
-  filter: i => i.user.id === interaction.user.id,
-  time: 60000
-});
+    const collector = message.createMessageComponentCollector({
+      filter: i => i.user.id === interaction.user.id,
+      time: 60000
+    });
+
     collector.on('collect', async i => {
-      if (i.user.id !== interaction.user.id) return;
       if (i.customId === 'log_next') currentPage++;
       if (i.customId === 'log_prev') currentPage--;
 
