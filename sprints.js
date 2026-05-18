@@ -241,7 +241,7 @@ async function postLeaderboard(channelId, guild) {
 
     // Small delay after all counts are in — gives any near-simultaneous calls
     // time to be blocked by the leaderboardPosted flag before DB writes begin
-    await channel.send('✨ All counts are in! The leaderboard is on its way...');
+    await channel.send('✨ All counts are in! Calculating the leaderboard... ✨');
     await delay(3000);
 
     const sorted = Object.entries(sprint.finalTimes).sort((a, b) => b[1] - a[1]);
