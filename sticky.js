@@ -18,11 +18,12 @@ async function handleStick(interaction) {
       await interaction.editReply({ content: 'Sticky message set!' });
     } catch (error) {
       console.error('Error setting sticky message:', error);
+      await interaction.editReply({ content: 'Something went wrong setting the sticky message. Please try again or contact a mod.' });
     }
   }
 
-  // ---- /editstick ----
-  async function handleEditStick(interaction) {
+// ---- /editstick ----
+async function handleEditStick(interaction) {
     try {
       await interaction.deferReply({ flags: 64 });
       const message = interaction.options.getString('message');
@@ -43,11 +44,12 @@ async function handleStick(interaction) {
       await interaction.editReply({ content: 'Sticky message updated!' });
     } catch (error) {
       console.error('Error editing sticky message:', error);
+      await interaction.editReply({ content: 'Something went wrong updating the sticky message. Please try again or contact a mod.' });
     }
   }
 
-  // ---- /unstick ----
-  async function handleUnstick(interaction) {
+// ---- /unstick ----
+async function handleUnstick(interaction) {
     try {
       await interaction.deferReply({ flags: 64 });
       const channel = interaction.channel;
@@ -66,11 +68,11 @@ async function handleStick(interaction) {
       await interaction.editReply({ content: 'Sticky message removed!' });
     } catch (error) {
       console.error('Error removing sticky message:', error);
+      await interaction.editReply({ content: 'Something went wrong removing the sticky message. Please try again or contact a mod.' });
     }
   }
 
-  // ---- STICKY MESSAGE REPOST ----
-// Called from index.js whenever a non-bot message is sent in a channel with a sticky
+// ---- STICKY MESSAGE REPOST ----
 async function handleStickyRepost(message) {
   try {
     const existing = await getStickyByChannel(message.channelId);
@@ -88,7 +90,7 @@ async function handleStickyRepost(message) {
   }
 }
 
-  module.exports = {
+module.exports = {
   handleStick,
   handleEditStick,
   handleUnstick,

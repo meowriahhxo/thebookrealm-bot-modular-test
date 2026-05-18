@@ -215,7 +215,9 @@ async function handlePointsLog(interaction) {
 
     console.log(`[pointslog] ${interaction.user.username} viewed the points log`);
 
-    const result = await pool.query('SELECT * FROM house_points ORDER BY created_at DESC');
+    const result = await pool.query(
+  'SELECT * FROM house_points WHERE created_at >= NOW() - INTERVAL \'14 days\' ORDER BY created_at DESC'
+);
     const entries = result.rows;
     const pageSize = 15;
     const totalPages = Math.ceil(entries.length / pageSize) || 1;
