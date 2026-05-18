@@ -5,17 +5,17 @@ const { pool } = require('./db');
 
 // maps each point category to its announcement channel
 const categoryChannels = {
-    'Reading Challenges': '1505683097763709157',
-    'Passive Competitions': '1505683097763709157',
-    'Live Competitions': '1505683097763709157',
-    'Ranks / Levels': '1505683097763709157',
-    'QOTD': '1505683097763709157',
-    'Bingo': '1505683097763709157',
-    'Book Reviews': '1505683097763709157',
-    'Boosts': '1505683097763709157',
-    'Book Club Discussion': '1505683097763709157',
-    'Book Club Rating': '1505683097763709157',
-    'Mod Points': '1505683097763709157'
+    'Reading Challenges': '1505759038502207539',
+    'Passive Competitions': '1505759130667974717',
+    'Live Competitions': '1505759084329041960',
+    'Ranks / Levels': '1505759173495881828',
+    'QOTD': '1505759210955214888',
+    'Bingo': '1505759254714253436',
+    'Book Reviews': '1505759291598962688',
+    'Boosts': '1506038557830156378',
+    'Book Club Discussion': '1505759355771949116',
+    'Book Club Rating': '1505759355771949116',
+    'Mod Points': '1505758862555353329'
 };
 
 // /addpoints command definition
