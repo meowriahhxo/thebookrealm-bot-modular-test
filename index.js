@@ -498,8 +498,8 @@ if (interaction.commandName === 'leaderboard') {
       else chosenPeriod = null;
 
       const title = period === 'lifetime'
-        ? `<a:book_pages:838547896361811979> **${interaction.user.username}'s Lifetime Stats**`
-        : `<a:book_pages:838547896361811979> **${interaction.user.username}'s ${period.charAt(0).toUpperCase() + period.slice(1)} Stats for ${chosenPeriod}**`;
+        ? `<a:book_pages:1506118494779998279> **${interaction.user.username}'s Lifetime Stats**`
+        : `<a:book_pages:1506118494779998279> **${interaction.user.username}'s ${period.charAt(0).toUpperCase() + period.slice(1)} Stats for ${chosenPeriod}**`;
 
       await interaction.editReply({ content: `${title}\n\nYou've read **${totalMinutes.toLocaleString()} minutes** across **${sprintCount} sprints**!` });
     } catch (error) {
