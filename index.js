@@ -59,8 +59,7 @@ client.on('error', (error) => {
 });
 
 process.on('SIGTERM', async () => {
-  console.log('[Shutdown] SIGTERM received, shutting down gracefully...');
-  await db.pool.end();
+  console.log('[Shutdown] SIGTERM received — intentional shutdown.'); await db.pool.end();
   client.destroy();
   process.exit(0);
 });
