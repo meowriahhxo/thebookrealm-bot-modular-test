@@ -279,7 +279,7 @@ async function postLeaderboard(channelId, guild) {
           let house = null;
           try {
             const member = await guild.members.fetch(userId);
-            displayName = member.displayName;
+            displayName = member.user.username;
             const houseRoles = {
               [process.env.ASPHODEL_ROLE_ID]: 'Asphodel',
               [process.env.DREANNI_ROLE_ID]: 'Dreanni',
