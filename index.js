@@ -41,7 +41,7 @@ const client = new Client({
 // ---- INIT MODULES ----
 sprints.init(client, getAuth);
 leaderboard.init(client);
-selfcare.init(client, getAuth);
+selfcare.init(client);
 sorting.init(client, getAuth);
 joins.init(client);
 

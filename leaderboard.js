@@ -4,9 +4,8 @@ const { pool } = require('./db');
 
 let client;
 
-function init(discordClient, authFn) {
+function init(discordClient) {
     client = discordClient;
-    getAuth = authFn;
 }
 
 // ---- LEADERBOARD ----
@@ -41,10 +40,11 @@ function buildLeaderboardEmbed(housePoints) {
     const gap = (sorted[0].points - sorted[1].points).toLocaleString();
 
     const embed = new EmbedBuilder()
-        .setTitle(`🏆 ${month} House Point Standings`)
-        .setColor(sorted[0].color)
+    .setTitle(`🏆 ${month} House Point Standings`)
+    .setURL('https://thebookrealm.net/leaderboard')
+    .setColor(sorted[0].color)
         .setTimestamp()
-        .setFooter({ text: "The Book Realm • Click the title to view the full spreadsheet!" });
+        .setFooter({ text: "The Book Realm • Click the title to view the full leaderboard!" });
 
     for (let i = 0; i < sorted.length; i++) {
         embed.addFields({ name: `${medals[i]} ${sorted[i].name}`, value: `${sorted[i].points.toLocaleString()} points`, inline: false });

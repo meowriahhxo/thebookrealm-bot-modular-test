@@ -1,13 +1,11 @@
-const { google } = require('googleapis');
 const { monthNames, houseEmojis, COMMON_ROOM_HOUSES, COMMON_ROOM_EMOJIS, CHECKIN_EMOJI, commonRoomMessageIds } = require('./constants');
 const { pool, saveCommonRoomMessage, getCommonRoomMessages } = require('./db');
 
 let client;
 let getAuth;
 
-function init(discordClient, authFn) {
+function init(discordClient) {
   client = discordClient;
-  getAuth = authFn;
 }
 
 // ---- SELF CARE POINTS ----
