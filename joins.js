@@ -2,11 +2,15 @@ const { AttachmentBuilder } = require('discord.js');
 const { createCanvas, loadImage, registerFont } = require('canvas');
 registerFont('./Roboto-Bold.ttf', { family: 'Roboto', weight: 'bold' });
 registerFont('./Roboto-Regular.ttf', { family: 'Roboto' });
+const { pool } = require('./db');
+const cron = require('node-cron');
 
 let client;
 
 function init(discordClient) {
   client = discordClient;
+  populateMembersIfEmpty();
+  startReconciliationCron();
 }
 
 // ---- GUILD MEMBER ADD ----
@@ -58,6 +62,13 @@ async function handleMemberAdd(member) {
       content: `Hello <@${member.id}>, welcome to **The Book Realm**!\nAll of the server channels and rules can be found in <#971504387056885861>. <a:book_pages:1506118494779998279> We suggest you first take the house quiz, which can be found in the same channel under the *House System* header. Each house competes monthly for the House Cup! Next, you can head over to <#971504539138130010> and let us know a little bit about you, and then <#971501013297135636> to choose which channels and activities you'd like to be notified about or participate in. If you have any questions, please feel free to ping a moderator or DM the ModMail bot (instructions are outlined in the welcome channel). The moderators are pink, purple, and dark blue 💜`,
       files: [attachment]
     });
+
+// Insert into members table for reconciliation tracking
+await pool.query(
+  `INSERT INTO members (user_id, username) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET username = $2`,
+  [member.id, member.user.username]
+);
+
   } catch (error) {
     console.error('Error sending welcome message:', error);
   }
@@ -71,14 +82,73 @@ async function handleMemberRemove(member) {
     await channel.send(`**${member.user.username}** just left the realm <a:book_pages:838547896361811979> We will miss you! :(`);
     const logChannel = await client.channels.fetch(process.env.KEEPERS_LOG_CHANNEL_ID);
     await logChannel.send(`**${member.user.username}** (ID: \`${member.user.id}\`) just left the server.`);
+  
+  // Remove from members table
+await pool.query(`DELETE FROM members WHERE user_id = $1`, [member.user.id]);
+  
   } catch (error) {
     console.error('Error sending leave message:', error);
   }
 }
 
+// ---- INITIAL POPULATION ----
+// Runs once on startup if members table is empty
+async function populateMembersIfEmpty() {
+  try {
+    const { rows } = await pool.query(`SELECT COUNT(*) FROM members`);
+    if (parseInt(rows[0].count) > 0) return;
+
+    console.log('[Members] Table is empty, populating from Discord...');
+    const guild = client.guilds.cache.first();
+    const members = await guild.members.fetch();
+
+    for (const [id, member] of members) {
+      if (member.user.bot) continue;
+      await pool.query(
+        `INSERT INTO members (user_id, username) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING`,
+        [id, member.user.username]
+      );
+    }
+    console.log(`[Members] Populated ${members.size} members.`);
+  } catch (error) {
+    console.error('[Members] Error populating members table:', error);
+  }
+}
+
+// ---- RECONCILIATION CRON ----
+// Runs daily at 3am ET — catches anyone who left during bot downtime
+function startReconciliationCron() {
+  cron.schedule('0 3 * * *', async () => {
+    console.log('[Reconciliation] Running daily member check...');
+    try {
+      const guild = client.guilds.cache.first();
+      const discordMembers = await guild.members.fetch();
+      const { rows: dbMembers } = await pool.query(`SELECT user_id, username FROM members`);
+
+      const discordIds = new Set(discordMembers.map((m) => m.id));
+      const logChannel = await client.channels.fetch(process.env.KEEPERS_LOG_CHANNEL_ID);
+
+      for (const row of dbMembers) {
+        if (!discordIds.has(row.user_id)) {
+          // They left during downtime — log to keepers log only
+          await logChannel.send(
+            `⚠️ **Missed leave detected:** **${row.username}** (ID: \`${row.user_id}\`) is no longer in the server.`
+          );
+          await pool.query(`DELETE FROM members WHERE user_id = $1`, [row.user_id]);
+          console.log(`[Reconciliation] Removed missing member: ${row.username}`);
+        }
+      }
+      console.log('[Reconciliation] Daily check complete.');
+    } catch (error) {
+      console.error('[Reconciliation] Error during reconciliation:', error);
+    }
+  }, { timezone: 'America/New_York' });
+}
 
 module.exports = {
-    init,
+  init,
   handleMemberAdd,
   handleMemberRemove,
+  populateMembersIfEmpty,
+  startReconciliationCron,
 };

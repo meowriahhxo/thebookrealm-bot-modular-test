@@ -240,6 +240,15 @@ client.once('clientReady', async () => {
   }
   console.log('Common room message IDs restored!');
 
+// Tiny HTTP server for Railway healthcheck (enables zero-downtime deploys)
+  const http = require('http');
+  http.createServer((req, res) => {
+    res.writeHead(200);
+    res.end('ok');
+  }).listen(process.env.PORT || 3000, () => {
+    console.log('[Health] HTTP server listening for Railway healthcheck');
+  });
+
   // House leaderboard — every 30 minutes
   cron.schedule('*/30 * * * *', () => {
     leaderboard.postHouseLeaderboard();
