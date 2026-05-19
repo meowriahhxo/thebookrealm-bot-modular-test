@@ -9,7 +9,6 @@ let client;
 
 function init(discordClient) {
   client = discordClient;
-  populateMembersIfEmpty();
   startReconciliationCron();
 }
 

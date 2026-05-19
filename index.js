@@ -233,6 +233,7 @@ client.once('clientReady', async () => {
   await sorting.initializeLastProcessedRow();
   await registerCommands();
   await sprints.restoreSprintState();
+  await joins.populateMembersIfEmpty();
 
   const storedMessages = await db.getCommonRoomMessages();
   for (const row of storedMessages) {
