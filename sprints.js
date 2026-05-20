@@ -343,7 +343,7 @@ async function postLeaderboard(channelId, guild) {
     // 4. React and post to spam channel
     try {
       for (const msg of allMessages) {
-        await msg.react('<:i_got:1506024806460428460>');
+        await msg.react('<:i_got:1490375689118158848>');
       }
       const sprintLabel = sprint.sprintNumber ? `Readathon Sprint #${sprint.sprintNumber}` : sprint.type;
       const endedAt = `<t:${Math.floor(Date.now() / 1000)}:t>`;
