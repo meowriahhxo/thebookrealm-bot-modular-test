@@ -16,7 +16,8 @@ async function getSheetData() {
   const month = easternTime.getMonth() + 1;
   const year = easternTime.getFullYear();
 
-  const result = await pool.query(
+  // get manual points from house_points
+  const pointsResult = await pool.query(
     `SELECT house, SUM(points) as total_points 
      FROM house_points 
      WHERE EXTRACT(MONTH FROM created_at) = $1 
@@ -25,10 +26,55 @@ async function getSheetData() {
     [month, year]
   );
 
+  // get reading sprint minutes by house
+  const sprintResult = await pool.query(
+    `SELECT house, SUM(minutes) as total_minutes
+     FROM sprint_results
+     WHERE EXTRACT(MONTH FROM sprint_date) = $1
+     AND EXTRACT(YEAR FROM sprint_date) = $2
+     AND sprint_type IN ('Tall Tomes Sprint', 'Short Stacks Sprint')
+     AND house IS NOT NULL
+     GROUP BY house`,
+    [month, year]
+  );
+
+  // get readathon minutes by house (doubled)
+  const readathonResult = await pool.query(
+    `SELECT house, SUM(minutes) * 2 as total_minutes
+     FROM sprint_results
+     WHERE EXTRACT(MONTH FROM sprint_date) = $1
+     AND EXTRACT(YEAR FROM sprint_date) = $2
+     AND sprint_type = 'Readathon Sprint'
+     AND house IS NOT NULL
+     GROUP BY house`,
+    [month, year]
+  );
+
+  // get reading sprint milestones (10 points per sprint joined)
+  const milestoneResult = await pool.query(
+    `SELECT house, COUNT(*) * 10 as total_points
+     FROM sprint_results
+     WHERE EXTRACT(MONTH FROM sprint_date) = $1
+     AND EXTRACT(YEAR FROM sprint_date) = $2
+     AND sprint_type IN ('Tall Tomes Sprint', 'Short Stacks Sprint')
+     AND house IS NOT NULL
+     GROUP BY house`,
+    [month, year]
+  );
+
   return HOUSES.map(house => {
     const shortName = house.name.replace('House ', '');
-    const row = result.rows.find(r => r.house === shortName);
-    return { name: house.name, points: row ? parseInt(row.total_points) : 0, color: house.color };
+    const points = pointsResult.rows.find(r => r.house === shortName);
+    const sprints = sprintResult.rows.find(r => r.house === shortName);
+    const readathon = readathonResult.rows.find(r => r.house === shortName);
+    const milestones = milestoneResult.rows.find(r => r.house === shortName);
+
+    const total = (points ? parseInt(points.total_points) : 0)
+      + (sprints ? parseInt(sprints.total_minutes) : 0)
+      + (readathon ? parseInt(readathon.total_minutes) : 0)
+      + (milestones ? parseInt(milestones.total_points) : 0);
+
+    return { name: house.name, points: total, color: house.color };
   });
 }
 
