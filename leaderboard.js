@@ -16,7 +16,6 @@ async function getSheetData() {
   const month = easternTime.getMonth() + 1;
   const year = easternTime.getFullYear();
 
-  // get manual points from house_points
   const pointsResult = await pool.query(
     `SELECT house, SUM(points) as total_points 
      FROM house_points 
@@ -26,21 +25,19 @@ async function getSheetData() {
     [month, year]
   );
 
-  // get reading sprint minutes by house
   const sprintResult = await pool.query(
     `SELECT house, SUM(minutes) as total_minutes
      FROM sprint_results
      WHERE EXTRACT(MONTH FROM sprint_date) = $1
      AND EXTRACT(YEAR FROM sprint_date) = $2
-     AND sprint_type IN ('Tall Tomes Sprint', 'Short Stacks Sprint')
+     AND sprint_type IN ('Tall Tomes Sprint', 'Short Stacks Sprint', 'Readathon Sprint')
      AND house IS NOT NULL
      GROUP BY house`,
     [month, year]
   );
 
-  // get readathon minutes by house (doubled)
-  const readathonResult = await pool.query(
-    `SELECT house, SUM(minutes) * 2 as total_minutes
+  const readathonBonusResult = await pool.query(
+    `SELECT house, SUM(minutes) as total_minutes
      FROM sprint_results
      WHERE EXTRACT(MONTH FROM sprint_date) = $1
      AND EXTRACT(YEAR FROM sprint_date) = $2
@@ -50,29 +47,64 @@ async function getSheetData() {
     [month, year]
   );
 
-  // get reading sprint milestones (10 points per sprint joined)
   const milestoneResult = await pool.query(
     `SELECT house, COUNT(*) * 10 as total_points
      FROM sprint_results
      WHERE EXTRACT(MONTH FROM sprint_date) = $1
      AND EXTRACT(YEAR FROM sprint_date) = $2
-     AND sprint_type IN ('Tall Tomes Sprint', 'Short Stacks Sprint')
+     AND sprint_type IN ('Tall Tomes Sprint', 'Short Stacks Sprint', 'Readathon Sprint')
      AND house IS NOT NULL
      GROUP BY house`,
     [month, year]
   );
 
+  const selfcareResult = await pool.query(
+    `SELECT 
+      (SUM(checkin_asphodel) + SUM(checkin_dreanni) * 0 + SUM(checkin_dreanni) * 0) * 0 as dummy,
+      SUM(checkin_asphodel) * 10 as checkin_asp, SUM(checkin_dreanni) * 10 as checkin_dre, SUM(checkin_laiidon) * 10 as checkin_lai, SUM(checkin_zeldarian) * 10 as checkin_zel,
+      (SUM(teeth_morning_asphodel) + SUM(teeth_evening_asphodel)) * 10 as teeth_asp,
+      (SUM(teeth_morning_dreanni) + SUM(teeth_evening_dreanni)) * 10 as teeth_dre,
+      (SUM(teeth_morning_laiidon) + SUM(teeth_evening_laiidon)) * 10 as teeth_lai,
+      (SUM(teeth_morning_zeldarian) + SUM(teeth_evening_zeldarian)) * 10 as teeth_zel,
+      SUM(bed_asphodel) * 10 as bed_asp, SUM(bed_dreanni) * 10 as bed_dre, SUM(bed_laiidon) * 10 as bed_lai, SUM(bed_zeldarian) * 10 as bed_zel,
+      SUM(hair_asphodel) * 10 as hair_asp, SUM(hair_dreanni) * 10 as hair_dre, SUM(hair_laiidon) * 10 as hair_lai, SUM(hair_zeldarian) * 10 as hair_zel,
+      (SUM(meds_morning_asphodel) + SUM(meds_evening_asphodel)) * 10 as meds_asp,
+      (SUM(meds_morning_dreanni) + SUM(meds_evening_dreanni)) * 10 as meds_dre,
+      (SUM(meds_morning_laiidon) + SUM(meds_evening_laiidon)) * 10 as meds_lai,
+      (SUM(meds_morning_zeldarian) + SUM(meds_evening_zeldarian)) * 10 as meds_zel,
+      SUM(dressed_asphodel) * 10 as dressed_asp, SUM(dressed_dreanni) * 10 as dressed_dre, SUM(dressed_laiidon) * 10 as dressed_lai, SUM(dressed_zeldarian) * 10 as dressed_zel,
+      SUM(wash_asphodel) * 10 as wash_asp, SUM(wash_dreanni) * 10 as wash_dre, SUM(wash_laiidon) * 10 as wash_lai, SUM(wash_zeldarian) * 10 as wash_zel,
+      SUM(drink_asphodel) * 10 as drink_asp, SUM(drink_dreanni) * 10 as drink_dre, SUM(drink_laiidon) * 10 as drink_lai, SUM(drink_zeldarian) * 10 as drink_zel,
+      SUM(meal_asphodel) * 10 as meal_asp, SUM(meal_dreanni) * 10 as meal_dre, SUM(meal_laiidon) * 10 as meal_lai, SUM(meal_zeldarian) * 10 as meal_zel,
+      SUM(read_asphodel) * 10 as read_asp, SUM(read_dreanni) * 10 as read_dre, SUM(read_laiidon) * 10 as read_lai, SUM(read_zeldarian) * 10 as read_zel
+     FROM selfcare_points
+     WHERE EXTRACT(MONTH FROM date) = $1
+     AND EXTRACT(YEAR FROM date) = $2`,
+    [month, year]
+  );
+
+  const sc = selfcareResult.rows[0] || {};
+
+  const selfcareTotals = {
+    Asphodel: (parseInt(sc.checkin_asp) || 0) + (parseInt(sc.teeth_asp) || 0) + (parseInt(sc.bed_asp) || 0) + (parseInt(sc.hair_asp) || 0) + (parseInt(sc.meds_asp) || 0) + (parseInt(sc.dressed_asp) || 0) + (parseInt(sc.wash_asp) || 0) + (parseInt(sc.drink_asp) || 0) + (parseInt(sc.meal_asp) || 0) + (parseInt(sc.read_asp) || 0),
+    Dreanni: (parseInt(sc.checkin_dre) || 0) + (parseInt(sc.teeth_dre) || 0) + (parseInt(sc.bed_dre) || 0) + (parseInt(sc.hair_dre) || 0) + (parseInt(sc.meds_dre) || 0) + (parseInt(sc.dressed_dre) || 0) + (parseInt(sc.wash_dre) || 0) + (parseInt(sc.drink_dre) || 0) + (parseInt(sc.meal_dre) || 0) + (parseInt(sc.read_dre) || 0),
+    Laiidon: (parseInt(sc.checkin_lai) || 0) + (parseInt(sc.teeth_lai) || 0) + (parseInt(sc.bed_lai) || 0) + (parseInt(sc.hair_lai) || 0) + (parseInt(sc.meds_lai) || 0) + (parseInt(sc.dressed_lai) || 0) + (parseInt(sc.wash_lai) || 0) + (parseInt(sc.drink_lai) || 0) + (parseInt(sc.meal_lai) || 0) + (parseInt(sc.read_lai) || 0),
+    Zeldarian: (parseInt(sc.checkin_zel) || 0) + (parseInt(sc.teeth_zel) || 0) + (parseInt(sc.bed_zel) || 0) + (parseInt(sc.hair_zel) || 0) + (parseInt(sc.meds_zel) || 0) + (parseInt(sc.dressed_zel) || 0) + (parseInt(sc.wash_zel) || 0) + (parseInt(sc.drink_zel) || 0) + (parseInt(sc.meal_zel) || 0) + (parseInt(sc.read_zel) || 0),
+  };
+
   return HOUSES.map(house => {
     const shortName = house.name.replace('House ', '');
     const points = pointsResult.rows.find(r => r.house === shortName);
     const sprints = sprintResult.rows.find(r => r.house === shortName);
-    const readathon = readathonResult.rows.find(r => r.house === shortName);
+    const readathonBonus = readathonBonusResult.rows.find(r => r.house === shortName);
     const milestones = milestoneResult.rows.find(r => r.house === shortName);
+    const selfcare = selfcareTotals[shortName] || 0;
 
     const total = (points ? parseInt(points.total_points) : 0)
       + (sprints ? parseInt(sprints.total_minutes) : 0)
-      + (readathon ? parseInt(readathon.total_minutes) : 0)
-      + (milestones ? parseInt(milestones.total_points) : 0);
+      + (readathonBonus ? parseInt(readathonBonus.total_minutes) : 0)
+      + (milestones ? parseInt(milestones.total_points) : 0)
+      + (selfcare * 2); // selfcare counted twice — once regular, once bonus
 
     return { name: house.name, points: total, color: house.color };
   });
