@@ -101,11 +101,19 @@ async function populateMembersIfEmpty() {
     const guild = client.guilds.cache.first();
     const members = await guild.members.fetch();
 
+    const values = [];
+    const params = [];
+    let i = 1;
     for (const [id, member] of members) {
       if (member.user.bot) continue;
+      values.push(`($${i}, $${i+1})`);
+      params.push(id, member.user.username);
+      i += 2;
+    }
+    if (values.length > 0) {
       await pool.query(
-        `INSERT INTO members (user_id, username) VALUES ($1, $2) ON CONFLICT (user_id) DO NOTHING`,
-        [id, member.user.username]
+        `INSERT INTO members (user_id, username) VALUES ${values.join(',')} ON CONFLICT (user_id) DO NOTHING`,
+        params
       );
     }
     console.log(`[Members] Populated ${members.size} members.`);
