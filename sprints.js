@@ -400,7 +400,7 @@ async function saveCreativeSprintToDB(sprintResults, guild, sprintType, channelI
       if (member.roles.cache.has(roleId)) { house = houseName; break; }
     }
     if (!house) continue;
-    noteLines.push(`${house} - ${member.displayName} - ${minutes} min`);
+    noteLines.push(`${house} - ${member.user.username} - ${minutes} min`);
   }
   const note = noteLines.join('\n');
 
@@ -425,9 +425,9 @@ async function saveCreativeSprintToDB(sprintResults, guild, sprintType, channelI
       await pool.query(
         `INSERT INTO house_points (user_id, username, house, category, points, added_by, channel_id, note, created_at, sprint_instance_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9)`,
-        [userId, member.displayName, house, sprintType, minutes, 'Digby', channelId, note, sprintInstanceId]
+        [userId, member.user.username, house, sprintType, minutes, 'Digby', channelId, note, sprintInstanceId]
       );
-      console.log(`[DB] Saved creative sprint: ${member.displayName} (${userId}) — ${minutes} min — ${house} — ${sprintType}`);
+      console.log(`[DB] Saved creative sprint: ${member.user.username} (${userId}) — ${minutes} min — ${house} — ${sprintType}`);
       dbWriteSucceeded = true;
     } catch (error) {
       console.error(`[saveCreativeSprintToDB] Error saving ${userId}:`, error);
