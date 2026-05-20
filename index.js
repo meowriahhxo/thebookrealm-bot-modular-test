@@ -42,7 +42,7 @@ const client = new Client({
 sprints.init(client, getAuth);
 leaderboard.init(client);
 selfcare.init(client);
-sorting.init(client, getAuth);
+sorting.init(client);
 joins.init(client);
 
 // ---- GLOBAL ERROR HANDLERS ----
@@ -218,6 +218,15 @@ async function registerCommands() {
           .setRequired(true))
       .toJSON(),
     ...housePoints.commands.map(cmd => cmd.toJSON()),
+  new SlashCommandBuilder()
+        .setName('sortinglog')
+        .setDescription('View sorting quiz submissions')
+        .setDefaultMemberPermissions(8)
+        .addIntegerOption(opt =>
+            opt.setName('number')
+            .setDescription('Submission number to view in full (optional)')
+            .setRequired(false))
+        .toJSON()
   ];
 
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
@@ -229,7 +238,6 @@ async function registerCommands() {
 client.once('clientReady', async () => {
   console.log(`Bot is online as ${client.user.tag}!`);
   await db.initializeDatabase();
-  await sorting.initializeLastProcessedRow();
   await registerCommands();
   await sprints.restoreSprintState();
   await joins.populateMembersIfEmpty();
@@ -239,6 +247,8 @@ client.once('clientReady', async () => {
     commonRoomMessageIds[row.channel_id] = row.message_id;
   }
   console.log('Common room message IDs restored!');
+
+sorting.startSortingListener();
 
 // Tiny HTTP server for Railway healthcheck (enables zero-downtime deploys)
   const http = require('http');
@@ -252,11 +262,6 @@ client.once('clientReady', async () => {
   // House leaderboard — every 30 minutes
   cron.schedule('*/30 * * * *', () => {
     leaderboard.postHouseLeaderboard();
-  });
-
-  // Sorting quiz check — every minute
-  cron.schedule('* * * * *', () => {
-    sorting.checkForNewQuizSubmissions();
   });
 
   // 7AM ET = 11:00 UTC — collect previous day's self-care points
@@ -669,6 +674,9 @@ if (interaction.commandName === 'leaderboard') {
   if (interaction.commandName === 'addpoints') await housePoints.handleAddPoints(interaction);
   if (interaction.commandName === 'removepoints') await housePoints.handleRemovePoints(interaction);
   if (interaction.commandName === 'pointslog') await housePoints.handlePointsLog(interaction);
+
+// ---- /sortinglog ----
+  if (interaction.commandName === 'sortinglog') await sorting.handleSortingLog(interaction);
 
   // ---- /stick, /editstick, /unstick ----
   if (interaction.commandName === 'stick') await sticky.handleStick(interaction);

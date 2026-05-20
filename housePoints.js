@@ -252,6 +252,130 @@ async function handlePointsLog(interaction) {
   }
 }
 
+// ---- /sortinglog COMMAND ----
+async function handleSortingLog(interaction) {
+  try {
+    const modMember = await interaction.guild.members.fetch(interaction.user.id);
+    if (!modMember.roles.cache.has(process.env.MOD_ROLE_ID)) {
+      return interaction.reply({ content: 'You do not have permission to use this command.', flags: 64 });
+    }
+
+    await interaction.deferReply({ flags: 64 });
+
+    const number = interaction.options.getInteger('number');
+
+    // ---- SINGLE SUBMISSION VIEW ----
+    if (number) {
+      const result = await pool.query(
+        'SELECT * FROM sorting_submissions WHERE id = $1',
+        [number]
+      );
+
+      if (result.rows.length === 0) {
+        return interaction.editReply({ content: `No submission found with number #${number}.` });
+      }
+
+      const row = result.rows[0];
+      const houseCounts = row.house_counts;
+      const winner = row.house;
+      const topScore = houseCounts[winner];
+      const tiedHouses = Object.keys(houseCounts).filter(h => houseCounts[h] === topScore);
+      const tieNote = tiedHouses.length > 1
+        ? `\n‼️ **Tie between ${tiedHouses.join(' and ')}!**`
+        : '';
+      const submittedAt = new Date(row.submitted_at).toLocaleString('en-US', { timeZone: 'America/New_York' });
+
+      const embed = new EmbedBuilder()
+        .setTitle(`✨ Sorting Quiz Submission #${row.id} ✨`)
+        .setDescription(`Don't forget to check house count before announcing the results!`)
+        .setColor(tiedHouses.length > 1 ? 0xff0000 : houseColors[winner])
+        .setFooter({ text: `Submitted at: ${submittedAt}` })
+        .addFields(
+          { name: '<:asphheart:1492573486785499307> Asphodel', value: `${houseCounts.Asphodel}`, inline: false },
+          { name: '<:dreanniheart:1492573488425340928> Dreanni', value: `${houseCounts.Dreanni}`, inline: false },
+          { name: '<:laiidonheart:1492573490434281532> Laiidon', value: `${houseCounts.Laiidon}`, inline: false },
+          { name: '<:zeldheart:1492573492564983970> Zeldarian', value: `${houseCounts.Zeldarian}`, inline: false },
+          { name: 'Results', value: `**${row.username}** has been sorted into **House ${winner}**! ${houseEmojis[winner]}${tieNote}`, inline: false }
+        );
+
+      return interaction.editReply({ embeds: [embed] });
+    }
+
+    // ---- LIST VIEW ----
+    console.log(`[sortinglog] ${interaction.user.username} viewed the sorting log`);
+
+    const result = await pool.query(
+      'SELECT * FROM sorting_submissions ORDER BY id DESC LIMIT 20'
+    );
+    const entries = result.rows;
+
+    if (entries.length === 0) {
+      return interaction.editReply({ content: 'No sorting submissions found.' });
+    }
+
+    const pageSize = 10;
+    const totalPages = Math.ceil(entries.length / pageSize) || 1;
+    let currentPage = 0;
+
+    function buildPage(page) {
+      const start = page * pageSize;
+      const slice = entries.slice(start, start + pageSize);
+      return slice.map(e => {
+        const date = new Date(e.submitted_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+        return `\`#${e.id}\` — ${e.username} — **${e.house}** — ${date}`;
+      }).join('\n');
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle('Sorting Quiz Log')
+      .setDescription(buildPage(0))
+      .setFooter({ text: `Page 1 of ${totalPages} · Use /sortinglog number: to view full results` })
+      .setColor(0x9b59b6);
+
+    await interaction.editReply({
+      embeds: [embed],
+      components: [{
+        type: 1,
+        components: [
+          { type: 2, style: 2, label: 'Previous', custom_id: 'sortinglog_prev', disabled: true },
+          { type: 2, style: 2, label: 'Next', custom_id: 'sortinglog_next', disabled: totalPages <= 1 }
+        ]
+      }]
+    });
+
+    const message = await interaction.fetchReply();
+    const collector = message.createMessageComponentCollector({
+      filter: i => i.user.id === interaction.user.id,
+      time: 60000
+    });
+
+    collector.on('collect', async i => {
+      if (i.customId === 'sortinglog_next') currentPage++;
+      if (i.customId === 'sortinglog_prev') currentPage--;
+
+      const updatedEmbed = new EmbedBuilder()
+        .setTitle('Sorting Quiz Log')
+        .setDescription(buildPage(currentPage))
+        .setFooter({ text: `Page ${currentPage + 1} of ${totalPages} · Use /sortinglog number: to view full results` })
+        .setColor(0x9b59b6);
+
+      await i.update({
+        embeds: [updatedEmbed],
+        components: [{
+          type: 1,
+          components: [
+            { type: 2, style: 2, label: 'Previous', custom_id: 'sortinglog_prev', disabled: currentPage === 0 },
+            { type: 2, style: 2, label: 'Next', custom_id: 'sortinglog_next', disabled: currentPage === totalPages - 1 }
+          ]
+        }]
+      });
+    });
+
+  } catch (error) {
+    console.error('Error handling sortinglog command:', error);
+  }
+}
+
 // export commands and handlers for use in index.js
 module.exports = {
     commands: [addPointsCommand, removePointsCommand, pointsLogCommand],
