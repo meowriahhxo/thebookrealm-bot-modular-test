@@ -385,27 +385,8 @@ async function saveCreativeSprintToDB(sprintResults, guild, sprintType, channelI
     [process.env.ZELDARIAN_ROLE_ID]: 'Zeldarian'
   };
 
-  // Build the note — one line per participant, used on every row
-  const noteLines = [];
-  for (const [userId, minutes] of Object.entries(sprintResults)) {
-    let member;
-    try {
-      member = await guild.members.fetch(userId);
-    } catch (e) {
-      console.error(`[saveCreativeSprintToDB] Could not fetch member ${userId} for note`);
-      continue;
-    }
-    let house = null;
-    for (const [roleId, houseName] of Object.entries(houseRoles)) {
-      if (member.roles.cache.has(roleId)) { house = houseName; break; }
-    }
-    if (!house) continue;
-    noteLines.push(`${house} - ${member.user.username} - ${minutes} min`);
-  }
-  const note = noteLines.join('\n');
-
-  // Write one row per participant to house_points
-  let dbWriteSucceeded = false;
+// First pass — fetch all members and group by house
+  const byHouse = {};
   for (const [userId, minutes] of Object.entries(sprintResults)) {
     let member;
     try {
@@ -414,31 +395,41 @@ async function saveCreativeSprintToDB(sprintResults, guild, sprintType, channelI
       console.error(`[saveCreativeSprintToDB] Could not fetch member ${userId}`);
       continue;
     }
-
     let house = null;
     for (const [roleId, houseName] of Object.entries(houseRoles)) {
       if (member.roles.cache.has(roleId)) { house = houseName; break; }
     }
     if (!house) continue;
+    if (!byHouse[house]) byHouse[house] = [];
+    byHouse[house].push({ userId, minutes, username: member.user.username });
+  }
 
-    try {
-      await pool.query(
-        `INSERT INTO house_points (user_id, username, house, category, points, added_by, channel_id, note, created_at, sprint_instance_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9)`,
-        [userId, member.user.username, house, sprintType, minutes, 'Digby', channelId, note, sprintInstanceId]
-      );
-      console.log(`[DB] Saved creative sprint: ${member.user.username} (${userId}) — ${minutes} min — ${house} — ${sprintType}`);
-      dbWriteSucceeded = true;
-    } catch (error) {
-      console.error(`[saveCreativeSprintToDB] Error saving ${userId}:`, error);
+  // Second pass — write rows, note only contains that house's participants
+  let dbWriteSucceeded = false;
+  for (const [house, members] of Object.entries(byHouse)) {
+    const note = members.map(m => `${m.username} - ${m.minutes} min`).join(', ');
+    for (const { userId, minutes, username } of members) {
       try {
-        const sprintChannel = await client.channels.fetch(process.env.SPRINT_SHENANIGANS_CHANNEL_ID);
-        await sprintChannel.send(`⚠️ **DB Write Failed**\nUser: <@${userId}>\nSprint type: ${sprintType}\nMinutes: ${minutes}\nError: ${error.message}`);
-      } catch (alertError) {
-        console.error('[saveCreativeSprintToDB] Failed to send DB alert:', alertError);
+        await pool.query(
+          `INSERT INTO house_points (user_id, username, house, category, points, added_by, channel_id, note, created_at, sprint_instance_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9)`,
+          [userId, username, house, sprintType, minutes, 'Digby', channelId, note, sprintInstanceId]
+        );
+        console.log(`[DB] Saved creative sprint: ${username} (${userId}) — ${minutes} min — ${house} — ${sprintType}`);
+        dbWriteSucceeded = true;
+      } catch (error) {
+        console.error(`[saveCreativeSprintToDB] Error saving ${userId}:`, error);
+        try {
+          const sprintChannel = await client.channels.fetch(process.env.SPRINT_SHENANIGANS_CHANNEL_ID);
+          await sprintChannel.send(`⚠️ **DB Write Failed**\nUser: <@${userId}>\nSprint type: ${sprintType}\nMinutes: ${minutes}\nError: ${error.message}`);
+        } catch (alertError) {
+          console.error('[saveCreativeSprintToDB] Failed to send DB alert:', alertError);
+        }
       }
     }
   }
+
+  return dbWriteSucceeded;
 
   return dbWriteSucceeded;
 }
