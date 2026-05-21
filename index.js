@@ -76,10 +76,10 @@ client.on('shardResume', (id) => {
   console.log(`[Shard ${id}] Resumed`);
 });
 
-// Heartbeat — logs every 5 minutes so we can confirm the bot is alive in Railway
+// Heartbeat — logs every 1 minute so we can confirm the bot is alive in Railway
 setInterval(() => {
   console.log(`[Heartbeat] Bot alive at ${new Date().toISOString()}`);
-}, 300000);
+}, 60000);
 
 // ---- COMMAND REGISTRATION ----
 async function registerCommands() {
