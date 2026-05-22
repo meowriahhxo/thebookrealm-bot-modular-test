@@ -16,7 +16,8 @@ const sorting = require('./sorting');
 const joins = require('./joins');
 const sticky = require('./sticky');
 const housePoints = require('./housePoints');
-const { channelSprintTypes, fixedDurations, sprintVerbs, sprintHappyVerbs, sprintRoles, COMMON_ROOM_HOUSES, COMMON_ROOM_EMOJIS, CHECKIN_EMOJI, commonRoomMessageIds, monthNames } = require('./constants');
+const constants = require('./constants');
+const { channelSprintTypes, fixedDurations, sprintVerbs, sprintHappyVerbs, sprintRoles, COMMON_ROOM_HOUSES, commonRoomMessageIds, monthNames } = constants;
 
 // ---- GOOGLE AUTH ----
 async function getAuth() {
@@ -239,6 +240,18 @@ client.once('clientReady', async () => {
   console.log(`Bot is online as ${client.user.tag}!`);
   await db.initializeDatabase();
   await registerCommands();
+
+  // load bot settings from DB (checkin emoji, double points category)
+  try {
+    const settingsResult = await db.pool.query(`SELECT key, value FROM bot_settings`);
+    const settings = {};
+    settingsResult.rows.forEach(row => { settings[row.key] = row.value; });
+    constants.setBotSettings({ checkinEmoji: settings.checkin_emoji });
+    console.log(`[Settings] Loaded — checkin_emoji: ${settings.checkin_emoji}, double_points_category: ${settings.double_points_category}`);
+  } catch (err) {
+    console.error('[Settings] Failed to load bot settings from DB, using defaults:', err.message);
+  }
+
   await sprints.restoreSprintState();
   await joins.populateMembersIfEmpty();
 
@@ -249,15 +262,6 @@ client.once('clientReady', async () => {
   console.log('Common room message IDs restored!');
 
 sorting.startSortingListener();
-
-// Tiny HTTP server for Railway healthcheck (enables zero-downtime deploys)
-  const http = require('http');
-  http.createServer((req, res) => {
-    res.writeHead(200);
-    res.end('ok');
-  }).listen(process.env.PORT || 3000, () => {
-    console.log('[Health] HTTP server listening for Railway healthcheck');
-  });
 
   // House leaderboard — every 30 minutes
   cron.schedule('*/30 * * * *', () => {
@@ -294,11 +298,11 @@ sorting.startSortingListener();
       try {
         const channel = await client.channels.fetch(house.channelId);
         const message = await channel.send(
-          `Hello, <@&${house.roleId}>! Have you done these?\n**Please react to this message in order of the emojis shown!**\n*-# (If you haven't done them yet, but you know you will, you can still react)*\n\n__**Morning Tasks**__\n🪥 | Brushed your teeth?\n🛏️ | Made your bed?\n👑 | Styled your hair?\n💊 | Took medication?\n👕 | Got dressed?\n\n__**Evening Tasks**__\n🦷 | Brushed your teeth?\n⚕️ | Took additional medication?\n🚿 | Had a wash today? - includes washing hands, face etc.\n🥛 | Had a drink today?\n🍕 | Had a meal today?\n📖 | Read your book?\n\n**Also make sure to Check In!**\n${CHECKIN_EMOJI} | Check in\n\nRemember, we love you all and hope you have a wonderful day!\n♥️`
+          `Hello, <@&${house.roleId}>! Have you done these?\n**Please react to this message in order of the emojis shown!**\n*-# (If you haven't done them yet, but you know you will, you can still react)*\n\n__**Morning Tasks**__\n🪥 | Brushed your teeth?\n🛏️ | Made your bed?\n👑 | Styled your hair?\n💊 | Took medication?\n👕 | Got dressed?\n\n__**Evening Tasks**__\n🦷 | Brushed your teeth?\n⚕️ | Took additional medication?\n🚿 | Had a wash today? - includes washing hands, face etc.\n🥛 | Had a drink today?\n🍕 | Had a meal today?\n📖 | Read your book?\n\n**Also make sure to Check In!**\n${constants.CHECKIN_EMOJI} | Check in\n\nRemember, we love you all and hope you have a wonderful day!\n♥️`
         );
         commonRoomMessageIds[house.channelId] = message.id;
         await db.saveCommonRoomMessage(house.channelId, message.id);
-        for (const emoji of COMMON_ROOM_EMOJIS) {
+        for (const emoji of constants.getCommonRoomEmojis()) {
           await message.react(emoji);
           await new Promise(res => setTimeout(res, 500));
         }
@@ -320,7 +324,7 @@ sorting.startSortingListener();
         }
         const channel = await client.channels.fetch(house.channelId);
         const message = await channel.messages.fetch(messageId);
-        for (const emoji of COMMON_ROOM_EMOJIS) {
+        for (const emoji of constants.getCommonRoomEmojis()) {
           const reaction = message.reactions.cache.get(emoji);
           if (reaction) {
             await reaction.users.remove(client.user.id);

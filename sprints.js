@@ -431,7 +431,6 @@ async function saveCreativeSprintToDB(sprintResults, guild, sprintType, channelI
 
   return dbWriteSucceeded;
 
-  return dbWriteSucceeded;
 }
 
 // ---- RESTORE SPRINT STATE ----

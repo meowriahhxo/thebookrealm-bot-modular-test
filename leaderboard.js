@@ -12,6 +12,14 @@ function init(discordClient) {
 let lastLeaderboardPost = 0;
 
 async function getSheetData() {
+// load double points category from DB
+  let doubleCategory = 'none';
+  try {
+    const setting = await pool.query(`SELECT value FROM bot_settings WHERE key = 'double_points_category'`);
+    if (setting.rows.length > 0) doubleCategory = setting.rows[0].value;
+  } catch (err) {
+    console.error('[Leaderboard] Failed to load double_points_category, defaulting to none:', err.message);
+  }
   const easternTime = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
   const month = easternTime.getMonth() + 1;
   const year = easternTime.getFullYear();
@@ -92,7 +100,7 @@ async function getSheetData() {
     Zeldarian: (parseInt(sc.checkin_zel) || 0) + (parseInt(sc.teeth_zel) || 0) + (parseInt(sc.bed_zel) || 0) + (parseInt(sc.hair_zel) || 0) + (parseInt(sc.meds_zel) || 0) + (parseInt(sc.dressed_zel) || 0) + (parseInt(sc.wash_zel) || 0) + (parseInt(sc.drink_zel) || 0) + (parseInt(sc.meal_zel) || 0) + (parseInt(sc.read_zel) || 0),
   };
 
-  return HOUSES.map(house => {
+  return Promise.all(HOUSES.map(async house => {
     const shortName = house.name.replace('House ', '');
     const points = pointsResult.rows.find(r => r.house === shortName);
     const sprints = sprintResult.rows.find(r => r.house === shortName);
@@ -100,14 +108,34 @@ async function getSheetData() {
     const milestones = milestoneResult.rows.find(r => r.house === shortName);
     const selfcare = selfcareTotals[shortName] || 0;
 
+    // calculate double points bonus — selfcare comes from selfcare_points, everything else from house_points
+    let doubleBonus = 0;
+    if (doubleCategory && doubleCategory !== 'none') {
+      if (doubleCategory === 'selfcare') {
+        // selfcare is already calculated above — just add it again
+        doubleBonus = selfcare;
+      } else {
+        // all other categories live in house_points
+        const bonusResult = await pool.query(
+          `SELECT COALESCE(SUM(points), 0) as bonus FROM house_points
+           WHERE house = $1 AND category = $2
+           AND EXTRACT(MONTH FROM created_at) = $3
+           AND EXTRACT(YEAR FROM created_at) = $4`,
+          [shortName, doubleCategory, month, year]
+        );
+        doubleBonus = parseInt(bonusResult.rows[0].bonus) || 0;
+      }
+    }
+
     const total = (points ? parseInt(points.total_points) : 0)
       + (sprints ? parseInt(sprints.total_minutes) : 0)
       + (readathonBonus ? parseInt(readathonBonus.total_minutes) : 0)
       + (milestones ? parseInt(milestones.total_points) : 0)
-      + (selfcare * 2); // selfcare counted twice — once regular, once bonus
-
+      + selfcare
+      + doubleBonus;
+      
     return { name: house.name, points: total, color: house.color };
-  });
+  }));
 }
 
 function buildLeaderboardEmbed(housePoints) {

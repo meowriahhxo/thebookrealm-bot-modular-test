@@ -1,4 +1,5 @@
-const { monthNames, houseEmojis, COMMON_ROOM_HOUSES, COMMON_ROOM_EMOJIS, CHECKIN_EMOJI, commonRoomMessageIds } = require('./constants');
+const constants = require('./constants');
+const { monthNames, houseEmojis, COMMON_ROOM_HOUSES, commonRoomMessageIds } = constants;
 const { pool, saveCommonRoomMessage, getCommonRoomMessages } = require('./db');
 
 let client;
@@ -51,7 +52,7 @@ async function processSelfCarePoints(targetDate) {
 
       try {
         const counts = {};
-        for (const emoji of COMMON_ROOM_EMOJIS) {
+        for (const emoji of constants.getCommonRoomEmojis()) {
           const reaction = message.reactions.cache.get(emoji);
           if (reaction) {
             const users = await reaction.users.fetch();
@@ -161,10 +162,10 @@ async function processSelfCarePoints(targetDate) {
         reactionCounts['Laiidon']?.['📖'] || 0,
         reactionCounts['Zeldarian']?.['📖'] || 0,
         // Check-in (variable emoji)
-        reactionCounts['Asphodel']?.[CHECKIN_EMOJI] || 0,
-        reactionCounts['Dreanni']?.[CHECKIN_EMOJI] || 0,
-        reactionCounts['Laiidon']?.[CHECKIN_EMOJI] || 0,
-        reactionCounts['Zeldarian']?.[CHECKIN_EMOJI] || 0,
+        reactionCounts['Asphodel']?.[constants.CHECKIN_EMOJI] || 0,
+        reactionCounts['Dreanni']?.[constants.CHECKIN_EMOJI] || 0,
+        reactionCounts['Laiidon']?.[constants.CHECKIN_EMOJI] || 0,
+        reactionCounts['Zeldarian']?.[constants.CHECKIN_EMOJI] || 0,
         // Total points per house
         Object.values(reactionCounts['Asphodel'] || {}).reduce((s, c) => s + c, 0) * 10,
         Object.values(reactionCounts['Dreanni'] || {}).reduce((s, c) => s + c, 0) * 10,
@@ -172,6 +173,31 @@ async function processSelfCarePoints(targetDate) {
         Object.values(reactionCounts['Zeldarian'] || {}).reduce((s, c) => s + c, 0) * 10,
       ]);
       console.log(`Successfully saved self-care data for ${targetDate} to database.`);
+    
+    // Write self-care summary to house_points for activity feed
+try {
+  const houses = ['Asphodel', 'Dreanni', 'Laiidon', 'Zeldarian'];
+  const houseKeys = ['Asphodel', 'Dreanni', 'Laiidon', 'Zeldarian'];
+  const pointsPerHouse = [
+    Object.values(reactionCounts['Asphodel'] || {}).reduce((s, c) => s + c, 0) * 10,
+    Object.values(reactionCounts['Dreanni'] || {}).reduce((s, c) => s + c, 0) * 10,
+    Object.values(reactionCounts['Laiidon'] || {}).reduce((s, c) => s + c, 0) * 10,
+    Object.values(reactionCounts['Zeldarian'] || {}).reduce((s, c) => s + c, 0) * 10,
+  ];
+
+  for (let i = 0; i < houses.length; i++) {
+    if (pointsPerHouse[i] === 0) continue;
+    await pool.query(
+      `INSERT INTO house_points (house, category, points, added_by, note, created_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())`,
+      [houses[i], 'Self Care', pointsPerHouse[i], 'Digby', `Self-care points for ${targetDate}`]
+    );
+  }
+  console.log(`Successfully wrote self-care summary to house_points.`);
+} catch (err) {
+  console.error(`Failed to write self-care summary to house_points:`, err);
+}
+    
     } catch (err) {
       console.error(`Failed to save self-care data to database:`, err);
     }
@@ -181,7 +207,7 @@ async function processSelfCarePoints(targetDate) {
       const thread = await client.channels.fetch(process.env.SELFCARE_SPAM_THREAD_ID);
 
       const taskLabels = [
-        { name: 'Check-In',  emojis: [CHECKIN_EMOJI] },
+        { name: 'Check-In',  emojis: [constants.CHECKIN_EMOJI] },
         { name: 'Teeth',     emojis: ['🪥', '🦷'] },
         { name: 'Bed',       emojis: ['🛏️'] },
         { name: 'Hair',      emojis: ['👑'] },

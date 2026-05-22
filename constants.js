@@ -119,15 +119,20 @@ const sprintSpamThreads = {
 };
 
 // ---- MORNING MESSAGE CONSTANTS ----
-// 🔄 CHANGE THIS EACH MONTH
-const CHECKIN_EMOJI = '🐝';
+// Loaded from DB at startup via loadBotSettings() in index.js
+let CHECKIN_EMOJI = '✅'; // fallback default
 
 // The emojis the bot reacts with on morning messages, in order
-const COMMON_ROOM_EMOJIS = [
+const COMMON_ROOM_EMOJIS_BASE = [
   '🪥', '🛏️', '👑', '💊', '👕',
   '🦷', '⚕️', '🚿', '🥛', '🍕',
-  '📖', CHECKIN_EMOJI
+  '📖'
 ];
+
+// use this function instead of the array directly so checkin emoji is always current
+function getCommonRoomEmojis() {
+  return [...COMMON_ROOM_EMOJIS_BASE, CHECKIN_EMOJI];
+}
 
 // One entry per house — channelId is where the morning message posts, roleId is who gets pinged
 const COMMON_ROOM_HOUSES = [
@@ -140,6 +145,11 @@ const COMMON_ROOM_HOUSES = [
 // Stores morning message IDs in memory so we can fetch reactions and remove bot reactions later
 // Gets populated on startup from the database and updated each morning when messages are posted
 const commonRoomMessageIds = {};
+
+// allows index.js to update settings loaded from DB at startup
+function setBotSettings({ checkinEmoji }) {
+  if (checkinEmoji) CHECKIN_EMOJI = checkinEmoji;
+}
 
 // ---- EXPORTS ----
 // Everything listed here is available to any file that does require('./constants')
@@ -157,7 +167,9 @@ module.exports = {
   sprintRoles,
   sprintSpamThreads,
   CHECKIN_EMOJI,
-  COMMON_ROOM_EMOJIS,
+  COMMON_ROOM_EMOJIS_BASE,
+  getCommonRoomEmojis,
   COMMON_ROOM_HOUSES,
   commonRoomMessageIds,
+  setBotSettings,
 };
