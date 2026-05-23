@@ -391,7 +391,7 @@ client.on('interactionCreate', async interaction => {
         sprint.finalTimes[userId] = minutes;
         sprint.submittedUsers.add(userId);
         sprint.originalParticipants.add(userId);
-        sprint.participants = sprint.participants.filter(id => id !== userId);
+        sprint.participants = (sprint.participants || []).filter(id => id !== interaction.user.id);
         await db.saveActiveSprint(channelId, { ...sprint, guildId: interaction.guild.id });
         if (Date.now() >= sprint.endTime) {
           await db.saveEndingSprint(channelId, {
@@ -438,7 +438,7 @@ client.on('interactionCreate', async interaction => {
           return;
         }
 
-        sprint.participants = sprint.participants.filter(id => id !== userId);
+        sprint.participants = (sprint.participants || []).filter(id => id !== interaction.user.id);
         if (activeSprints[channelId]) {
           if (sprint.originalParticipants) sprint.originalParticipants.delete(userId);
           await db.saveActiveSprint(channelId, { ...sprint, guildId: interaction.guild.id });
@@ -1006,7 +1006,7 @@ if (interaction.commandName === 'leaderboard') {
       sprint.finalTimes[interaction.user.id] = minutes;
       sprint.submittedUsers.add(interaction.user.id);
       sprint.originalParticipants.add(interaction.user.id);
-      sprint.participants = sprint.participants.filter(id => id !== interaction.user.id);
+      sprint.participants = (sprint.participants || []).filter(id => id !== interaction.user.id);
       await db.saveActiveSprint(channelId, { ...sprint, guildId: interaction.guild.id });
       if (Date.now() >= sprint.endTime) {
         await db.saveEndingSprint(channelId, {
@@ -1163,7 +1163,7 @@ client.on('messageCreate', async message => {
         sprint.finalTimes[message.author.id] = minutes;
         sprint.submittedUsers.add(message.author.id);
         sprint.originalParticipants.add(message.author.id);
-        sprint.participants = sprint.participants.filter(id => id !== message.author.id);
+        sprint.participants = (sprint.participants || []).filter(id => id !== interaction.user.id);
         await message.reply(`<@${message.author.id}> has ${verb} for **${minutes} minutes**!`);
         const sprintEnded = Date.now() >= sprint.endTime;
         const allSubmitted = [...sprint.originalParticipants].every(id => sprint.submittedUsers.has(id));
