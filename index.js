@@ -292,13 +292,21 @@ sorting.startSortingListener();
   });
 
   // 8AM ET = 12:00 UTC — post common room messages
-  cron.schedule('0 12 * * *', async () => {
+cron.schedule('0 12 * * *', async () => {
     console.log('Posting common room messages...');
+    try {
+      const settingsResult = await db.pool.query(`SELECT value FROM bot_settings WHERE key = 'checkin_emoji'`);
+      if (settingsResult.rows.length > 0) {
+        constants.setBotSettings({ checkinEmoji: settingsResult.rows[0].value });
+      }
+    } catch (err) {
+      console.error('[Settings] Failed to refresh checkin_emoji before morning message:', err);
+    }
     for (const house of COMMON_ROOM_HOUSES) {
       try {
         const channel = await client.channels.fetch(house.channelId);
         const message = await channel.send(
-          `Hello, <@&${house.roleId}>! Have you done these?\n**Please react to this message in order of the emojis shown!**\n*-# (If you haven't done them yet, but you know you will, you can still react)*\n\n__**Morning Tasks**__\n🪥 | Brushed your teeth?\n🛏️ | Made your bed?\n👑 | Styled your hair?\n💊 | Took medication?\n👕 | Got dressed?\n\n__**Evening Tasks**__\n🦷 | Brushed your teeth?\n⚕️ | Took additional medication?\n🚿 | Had a wash today? - includes washing hands, face etc.\n🥛 | Had a drink today?\n🍕 | Had a meal today?\n📖 | Read your book?\n\n**Also make sure to Check In!**\n${constants.CHECKIN_EMOJI} | Check in\n\nRemember, we love you all and hope you have a wonderful day!\n♥️`
+          `Hello, <@&${house.roleId}>! Have you done these?\n**Please react to this message in order of the emojis shown!**\n*-# (If you haven't done them yet, but you know you will, you can still react)*\n\n__**Morning Tasks**__\n🪥 | Brushed your teeth?\n🛏️ | Made your bed?\n👑 | Styled your hair?\n💊 | Took medication?\n👕 | Got dressed?\n\n__**Evening Tasks**__\n🦷 | Brushed your teeth?\n⚕️ | Took additional medication?\n🚿 | Had a wash today? - includes washing hands, face etc.\n🥛 | Had a drink today?\n🍕 | Had a meal today?\n📖 | Read your book?\n\n**Also make sure to Check In!**\n${constants.getCheckinEmoji()} | Check in\n\nRemember, we love you all and hope you have a wonderful day!\n♥️`
         );
         commonRoomMessageIds[house.channelId] = message.id;
         await db.saveCommonRoomMessage(house.channelId, message.id);

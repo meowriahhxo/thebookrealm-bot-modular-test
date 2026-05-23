@@ -162,10 +162,10 @@ async function processSelfCarePoints(targetDate) {
         reactionCounts['Laiidon']?.['📖'] || 0,
         reactionCounts['Zeldarian']?.['📖'] || 0,
         // Check-in (variable emoji)
-        reactionCounts['Asphodel']?.[constants.CHECKIN_EMOJI] || 0,
-        reactionCounts['Dreanni']?.[constants.CHECKIN_EMOJI] || 0,
-        reactionCounts['Laiidon']?.[constants.CHECKIN_EMOJI] || 0,
-        reactionCounts['Zeldarian']?.[constants.CHECKIN_EMOJI] || 0,
+        reactionCounts['Asphodel']?.[constants.getCheckinEmoji()] || 0,
+        reactionCounts['Dreanni']?.[constants.getCheckinEmoji()] || 0,
+        reactionCounts['Laiidon']?.[constants.getCheckinEmoji()] || 0,
+        reactionCounts['Zeldarian']?.[constants.getCheckinEmoji()] || 0,
         // Total points per house
         Object.values(reactionCounts['Asphodel'] || {}).reduce((s, c) => s + c, 0) * 10,
         Object.values(reactionCounts['Dreanni'] || {}).reduce((s, c) => s + c, 0) * 10,

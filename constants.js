@@ -166,7 +166,7 @@ module.exports = {
   fixedDurations,
   sprintRoles,
   sprintSpamThreads,
-  CHECKIN_EMOJI,
+  getCheckinEmoji() { return CHECKIN_EMOJI; },
   COMMON_ROOM_EMOJIS_BASE,
   getCommonRoomEmojis,
   COMMON_ROOM_HOUSES,
