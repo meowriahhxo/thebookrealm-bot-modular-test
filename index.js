@@ -1163,7 +1163,7 @@ client.on('messageCreate', async message => {
         sprint.finalTimes[message.author.id] = minutes;
         sprint.submittedUsers.add(message.author.id);
         sprint.originalParticipants.add(message.author.id);
-        sprint.participants = (sprint.participants || []).filter(id => id !== interaction.user.id);
+        sprint.participants = (sprint.participants || []).filter(id => id !== message.author.id);
         await message.reply(`<@${message.author.id}> has ${verb} for **${minutes} minutes**!`);
         const sprintEnded = Date.now() >= sprint.endTime;
         const allSubmitted = [...sprint.originalParticipants].every(id => sprint.submittedUsers.has(id));
