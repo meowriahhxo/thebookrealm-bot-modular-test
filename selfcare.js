@@ -207,7 +207,7 @@ try {
       const thread = await client.channels.fetch(process.env.SELFCARE_SPAM_THREAD_ID);
 
       const taskLabels = [
-        { name: 'Check-In',  emojis: [constants.CHECKIN_EMOJI] },
+        { name: 'Check-In',  emojis: [constants.getCheckinEmoji()] },
         { name: 'Teeth',     emojis: ['🪥', '🦷'] },
         { name: 'Bed',       emojis: ['🛏️'] },
         { name: 'Hair',      emojis: ['👑'] },
