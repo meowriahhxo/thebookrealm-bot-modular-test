@@ -27,8 +27,9 @@ async function getSheetData() {
   const pointsResult = await pool.query(
     `SELECT house, SUM(points) as total_points 
      FROM house_points 
-     WHERE EXTRACT(MONTH FROM created_at) = $1 
-     AND EXTRACT(YEAR FROM created_at) = $2
+     WHERE EXTRACT(MONTH FROM created_at AT TIME ZONE 'America/New_York') = $1 
+     AND EXTRACT(YEAR FROM created_at AT TIME ZONE 'America/New_York') = $2
+     AND category != 'Self Care'
      GROUP BY house`,
     [month, year]
   );
@@ -36,8 +37,8 @@ async function getSheetData() {
   const sprintResult = await pool.query(
     `SELECT house, SUM(minutes) as total_minutes
      FROM sprint_results
-     WHERE EXTRACT(MONTH FROM sprint_date) = $1
-     AND EXTRACT(YEAR FROM sprint_date) = $2
+     WHERE EXTRACT(MONTH FROM sprint_ended_at AT TIME ZONE 'America/New_York') = $1
+     AND EXTRACT(YEAR FROM sprint_ended_at AT TIME ZONE 'America/New_York') = $2
      AND sprint_type IN ('Tall Tomes Sprint', 'Short Stacks Sprint', 'Readathon Sprint')
      AND house IS NOT NULL
      GROUP BY house`,
@@ -47,8 +48,8 @@ async function getSheetData() {
   const readathonBonusResult = await pool.query(
     `SELECT house, SUM(minutes) as total_minutes
      FROM sprint_results
-     WHERE EXTRACT(MONTH FROM sprint_date) = $1
-     AND EXTRACT(YEAR FROM sprint_date) = $2
+     WHERE EXTRACT(MONTH FROM sprint_ended_at AT TIME ZONE 'America/New_York') = $1
+     AND EXTRACT(YEAR FROM sprint_ended_at AT TIME ZONE 'America/New_York') = $2
      AND sprint_type = 'Readathon Sprint'
      AND house IS NOT NULL
      GROUP BY house`,
@@ -58,8 +59,8 @@ async function getSheetData() {
   const milestoneResult = await pool.query(
     `SELECT house, COUNT(*) * 10 as total_points
      FROM sprint_results
-     WHERE EXTRACT(MONTH FROM sprint_date) = $1
-     AND EXTRACT(YEAR FROM sprint_date) = $2
+     WHERE EXTRACT(MONTH FROM sprint_ended_at AT TIME ZONE 'America/New_York') = $1
+     AND EXTRACT(YEAR FROM sprint_ended_at AT TIME ZONE 'America/New_York') = $2
      AND sprint_type IN ('Tall Tomes Sprint', 'Short Stacks Sprint', 'Readathon Sprint')
      AND house IS NOT NULL
      GROUP BY house`,
@@ -86,8 +87,8 @@ async function getSheetData() {
       SUM(meal_asphodel) * 10 as meal_asp, SUM(meal_dreanni) * 10 as meal_dre, SUM(meal_laiidon) * 10 as meal_lai, SUM(meal_zeldarian) * 10 as meal_zel,
       SUM(read_asphodel) * 10 as read_asp, SUM(read_dreanni) * 10 as read_dre, SUM(read_laiidon) * 10 as read_lai, SUM(read_zeldarian) * 10 as read_zel
      FROM selfcare_points
-     WHERE EXTRACT(MONTH FROM date) = $1
-     AND EXTRACT(YEAR FROM date) = $2`,
+     WHERE EXTRACT(MONTH FROM processed_at AT TIME ZONE 'America/New_York') = $1
+     AND EXTRACT(YEAR FROM processed_at AT TIME ZONE 'America/New_York') = $2`,
     [month, year]
   );
 
@@ -119,8 +120,8 @@ async function getSheetData() {
         const bonusResult = await pool.query(
           `SELECT COALESCE(SUM(points), 0) as bonus FROM house_points
            WHERE house = $1 AND category = $2
-           AND EXTRACT(MONTH FROM created_at) = $3
-           AND EXTRACT(YEAR FROM created_at) = $4`,
+           AND EXTRACT(MONTH FROM created_at AT TIME ZONE 'America/New_York') = $3
+           AND EXTRACT(YEAR FROM created_at AT TIME ZONE 'America/New_York') = $4`,
           [shortName, doubleCategory, month, year]
         );
         doubleBonus = parseInt(bonusResult.rows[0].bonus) || 0;
