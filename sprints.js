@@ -132,18 +132,21 @@ async function startSprint(channelId, type, minutes, sprintNumber = null, carrie
           await channel.send(fullMessage);
         }
 
-        await saveEndingSprint(channelId, {
-          guildId: guild.id,
-          type: sprint.type,
-          duration: sprint.duration,
-          sprintNumber: sprint.sprintNumber,
-          originalParticipants: sprint.originalParticipants,
-          finalTimes: sprint.finalTimes,
-          submittedUsers: sprint.submittedUsers,
-          leaderboardAt: Date.now() + submitWindow * 60 * 1000
-        });
+const leaderboardAt = Date.now() + submitWindow * 60 * 1000;
+sprint.leaderboardAt = leaderboardAt;
 
-        sprint.endMessageSent = true;
+await saveEndingSprint(channelId, {
+  guildId: guild.id,
+  type: sprint.type,
+  duration: sprint.duration,
+  sprintNumber: sprint.sprintNumber,
+  originalParticipants: sprint.originalParticipants,
+  finalTimes: sprint.finalTimes,
+  submittedUsers: sprint.submittedUsers,
+  leaderboardAt
+});
+
+sprint.endMessageSent = true;
         console.log(`[Sprint ${channelId}] End message sent and ending sprint saved to DB`);
 
         sprint.reminderTimer = setTimeout(async () => {
@@ -305,10 +308,9 @@ async function postLeaderboard(channelId, guild) {
           }
         }
       }
-    } else if (sprint.type === 'Study Sprint' || sprint.type === 'Writing Sprint' || sprint.type === 'Art Sprint') {
-      // Creative sprints go to house_points table instead of sprint_results
-      const creativeSuccess = await saveCreativeSprintToDB(sprint.finalTimes, guild, sprint.type, channelId);
-      if (!creativeSuccess) {
+} else if (sprint.type === 'Study Sprint' || sprint.type === 'Writing Sprint' || sprint.type === 'Art Sprint') {
+  const creativeSuccess = Object.keys(sprint.finalTimes).length === 0 || await saveCreativeSprintToDB(sprint.finalTimes, guild, sprint.type, channelId);
+  if (!creativeSuccess) {
         try {
           const sprintChannel = await client.channels.fetch(process.env.SPRINT_SHENANIGANS_CHANNEL_ID);
           await sprintChannel.send(`⚠️ **DB Write Failed**\nSprint: ${sprint.type}\nNo results were saved successfully.`);
@@ -603,18 +605,21 @@ async function restoreSprintState() {
               await channel.send(fullMessage);
             }
 
-            await saveEndingSprint(row.channel_id, {
-              guildId: sprint.guildId,
-              type: sprint.type,
-              duration: sprint.duration,
-              sprintNumber: sprint.sprintNumber,
-              originalParticipants: sprint.originalParticipants,
-              finalTimes: sprint.finalTimes,
-              submittedUsers: sprint.submittedUsers,
-              leaderboardAt: Date.now() + submitWindow * 60 * 1000
-            });
+const leaderboardAt = Date.now() + submitWindow * 60 * 1000;
+sprint.leaderboardAt = leaderboardAt;
 
-            sprint.endMessageSent = true;
+await saveEndingSprint(row.channel_id, {
+  guildId: guild.id,
+  type: sprint.type,
+  duration: sprint.duration,
+  sprintNumber: sprint.sprintNumber,
+  originalParticipants: sprint.originalParticipants,
+  finalTimes: sprint.finalTimes,
+  submittedUsers: sprint.submittedUsers,
+  leaderboardAt
+});
+
+sprint.endMessageSent = true;
             console.log(`[Sprint ${row.channel_id}] End message sent and ending sprint saved to DB (restored)`);
 
             sprint.reminderTimer = setTimeout(async () => {

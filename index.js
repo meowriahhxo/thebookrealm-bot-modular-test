@@ -356,17 +356,16 @@ client.on('interactionCreate', async interaction => {
     const { activeSprints, pendingSprints, cleanupSprint, postLeaderboard } = sprints;
 
     if (interaction.customId === 'confirm_cancel') {
-      const sprint = activeSprints[channelId] || pendingSprints[channelId];
-      if (!sprint) {
-        await interaction.update({ content: 'No sprint to cancel!', components: [] });
-        return;
-      }
-      await cleanupSprint(channelId);
-      await db.deletePendingSprint(channelId);
-      delete pendingSprints[channelId];
-      const mentions = sprint.participants.map(id => `<@${id}>`).join(', ');
-      await interaction.update({ content: `The **${sprint.type}** has been cancelled.${mentions ? ` ${mentions}` : ''}`, components: [] });
-    }
+  const sprint = activeSprints[channelId] || pendingSprints[channelId];
+  if (!sprint) {
+    await interaction.update({ content: 'No sprint to cancel!', components: [] });
+    return;
+  }
+  if (pendingSprints[channelId]?.pendingTimer) clearTimeout(pendingSprints[channelId].pendingTimer);
+  await cleanupSprint(channelId);
+  await db.deletePendingSprint(channelId);
+  delete pendingSprints[channelId];
+}
 
     if (interaction.customId === 'deny_cancel') {
       const sprint = activeSprints[channelId] || pendingSprints[channelId];
@@ -402,7 +401,7 @@ client.on('interactionCreate', async interaction => {
             originalParticipants: sprint.originalParticipants,
             finalTimes: sprint.finalTimes,
             submittedUsers: sprint.submittedUsers,
-            leaderboardAt: sprint.leaderboardAt
+            leaderboardAt: sprint.leaderboardAt ?? (Date.now() + (sprint.duration <= 30 ? 5 : 7) * 60 * 1000)
           });
         }
 
@@ -897,11 +896,12 @@ if (interaction.commandName === 'leaderboard') {
         components: [row]
       });
     } else {
-      await cleanupSprint(channelId);
-      await db.deletePendingSprint(channelId);
-      delete pendingSprints[channelId];
-      await interaction.reply(`The **${sprint.type}** has been cancelled.`);
-    }
+  if (pendingSprints[channelId]?.pendingTimer) clearTimeout(pendingSprints[channelId].pendingTimer);
+  await cleanupSprint(channelId);
+  await db.deletePendingSprint(channelId);
+  delete pendingSprints[channelId];
+  await interaction.reply(`The **${sprint.type}** has been cancelled.`);
+}
   }
 
   // ---- /join ----
@@ -1017,7 +1017,7 @@ if (interaction.commandName === 'leaderboard') {
           originalParticipants: sprint.originalParticipants,
           finalTimes: sprint.finalTimes,
           submittedUsers: sprint.submittedUsers,
-          leaderboardAt: sprint.leaderboardAt
+          leaderboardAt: sprint.leaderboardAt ?? (Date.now() + (sprint.duration <= 30 ? 5 : 7) * 60 * 1000)
         });
       }
       await interaction.editReply(`<@${interaction.user.id}> has ${verb} for **${minutes} minutes**!`);
