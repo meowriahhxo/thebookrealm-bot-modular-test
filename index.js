@@ -287,7 +287,7 @@ sorting.startSortingListener();
     const easternTime = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
     const lastDayOfMonth = new Date(easternTime.getFullYear(), easternTime.getMonth() + 1, 0).getDate();
     if (easternTime.getDate() !== lastDayOfMonth) return;
-    const targetDate = easternTime.toISOString().split('T')[0];
+    const targetDate = `${easternTime.getFullYear()}-${String(easternTime.getMonth() + 1).padStart(2, '0')}-${String(easternTime.getDate()).padStart(2, '0')}`;
     await selfcare.processSelfCarePoints(targetDate);
   });
 
