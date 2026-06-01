@@ -52,7 +52,6 @@ const addPointsCommand = new SlashCommandBuilder()
     { name: 'QOTD', value: 'QOTD' },
     { name: 'Ranks / Levels', value: 'Ranks / Levels' },
     { name: 'Reading Challenges', value: 'Reading Challenges' }
-)
             ))
     .addIntegerOption(option =>
         option.setName('points')
