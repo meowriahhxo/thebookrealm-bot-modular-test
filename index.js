@@ -282,8 +282,8 @@ sorting.startSortingListener();
     await selfcare.processSelfCarePoints(targetDate);
   });
 
-  // 11PM ET on last day of month = 04:00 UTC next day
-  cron.schedule('0 4 * * *', async () => {
+  // 11:30PM ET on last day of month = 03:30 UTC next day
+  cron.schedule('30 3 * * *', async () => {
     const easternTime = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
     const lastDayOfMonth = new Date(easternTime.getFullYear(), easternTime.getMonth() + 1, 0).getDate();
     if (easternTime.getDate() !== lastDayOfMonth) return;
