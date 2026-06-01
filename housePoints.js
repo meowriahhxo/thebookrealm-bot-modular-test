@@ -15,7 +15,9 @@ const categoryChannels = {
     'Boosts': '1473037974345089250',
     'Book Club Discussion': '1473038020100751390',
     'Book Club Rating': '1473038020100751390',
-    'Mod Points': '1487877846558052443'
+    'Mod Points': '1487877846558052443',
+    'Art': '1510937508505063434',
+'Photography': '1510937599521456239'    
 };
 
 // /addpoints command definition
@@ -37,17 +39,20 @@ const addPointsCommand = new SlashCommandBuilder()
             .setDescription('The category of points')
             .setRequired(true)
             .addChoices(
-                { name: 'Reading Challenges', value: 'Reading Challenges' },
-                { name: 'Passive Competitions', value: 'Passive Competitions' },
-                { name: 'Live Competitions', value: 'Live Competitions' },
-                { name: 'Ranks / Levels', value: 'Ranks / Levels' },
-                { name: 'QOTD', value: 'QOTD' },
-                { name: 'Bingo', value: 'Bingo' },
-                { name: 'Book Reviews', value: 'Book Reviews' },
-                { name: 'Boosts', value: 'Boosts' },
-                { name: 'Book Club Discussion', value: 'Book Club Discussion' },
-                { name: 'Book Club Rating', value: 'Book Club Rating' },
-                { name: 'Mod Points', value: 'Mod Points' }
+    { name: 'Art', value: 'Art' },
+    { name: 'Bingo', value: 'Bingo' },
+    { name: 'Book Club Discussion', value: 'Book Club Discussion' },
+    { name: 'Book Club Rating', value: 'Book Club Rating' },
+    { name: 'Book Reviews', value: 'Book Reviews' },
+    { name: 'Boosts', value: 'Boosts' },
+    { name: 'Live Competitions', value: 'Live Competitions' },
+    { name: 'Mod Points', value: 'Mod Points' },
+    { name: 'Passive Competitions', value: 'Passive Competitions' },
+    { name: 'Photography', value: 'Photography' },
+    { name: 'QOTD', value: 'QOTD' },
+    { name: 'Ranks / Levels', value: 'Ranks / Levels' },
+    { name: 'Reading Challenges', value: 'Reading Challenges' }
+)
             ))
     .addIntegerOption(option =>
         option.setName('points')
