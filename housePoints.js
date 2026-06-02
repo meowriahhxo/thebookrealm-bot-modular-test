@@ -112,9 +112,10 @@ if (points < 1 || points > 10000) {
     try {
       const announcementChannel = await interaction.client.channels.fetch(categoryChannels[category]);
       await announcementChannel.send(
-        `${house} - ${username} - ${category} - ${points} points` +
-        (note ? `\n*📝 ${note}*` : '')
-      );
+  `${house} - ${username} - ${category} - ${points} points` +
+  (note ? `\n*📝 ${note}*` : '') +
+  `\n*Added by ${interaction.user.username}*`
+);
     } catch (e) {
       console.log(`Could not post to announcement channel for ${category} — skipping`);
     }
@@ -190,7 +191,7 @@ async function handlePointsLog(interaction) {
     console.log(`[pointslog] ${interaction.user.username} viewed the points log`);
 
     const result = await pool.query(
-  'SELECT * FROM house_points WHERE created_at >= NOW() - INTERVAL \'14 days\' ORDER BY created_at DESC'
+  'SELECT * FROM house_points WHERE created_at >= NOW() - INTERVAL \'7 days\' ORDER BY created_at DESC'
 );
     const entries = result.rows;
     const pageSize = 15;
@@ -202,7 +203,7 @@ async function handlePointsLog(interaction) {
       const slice = entries.slice(start, start + pageSize);
       if (slice.length === 0) return 'No entries found.';
       return slice.map(e => {
-        const date = new Date(e.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+        const date = new Date(e.created_at).toLocaleString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
         return `\`${e.id}\` - ${e.house} - ${e.username} - ${e.category} - ${e.points} points - ${date} - added by ${e.added_by}`;
       }).join('\n');
     }
