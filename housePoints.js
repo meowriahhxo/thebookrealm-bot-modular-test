@@ -114,7 +114,7 @@ if (points < 1 || points > 10000) {
       await announcementChannel.send(
   `${house} - ${username} - ${category} - ${points} points` +
   (note ? `\n*📝 ${note}*` : '') +
-  `\n*Added by ${interaction.user.username}*`
+  `\n-# Added by ${interaction.user.username}`
 );
     } catch (e) {
       console.log(`Could not post to announcement channel for ${category} — skipping`);
