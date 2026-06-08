@@ -267,7 +267,7 @@ async function postLeaderboard(channelId, guild) {
       currentRank++;
     }
 
-    leaderboard += `\n${sorted.length} member${sorted.length === 1 ? '' : 's'} read **${totalTime} minutes** in a **${sprint.duration} minute** sprint!\n`;
+    leaderboard += `\n**${sorted.length} member${sorted.length === 1 ? '' : 's'}** read **${totalTime} minutes** in a **${sprint.duration} minute** sprint!\n`;
     leaderboard += `\nThanks for joining us. You can use the \`/sprint\` command to start another sprint!\n\n-# If your minutes total is not correct on the leaderboard or if the bot has **not** reacted to this post (please give it 2 minutes to process the data), please tag the Keepers of the Realm role to have it adjusted!\n\n`;
 
     // 1. Save to DB FIRST — canonical records persisted before anything else
