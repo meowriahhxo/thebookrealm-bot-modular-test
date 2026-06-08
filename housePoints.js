@@ -91,10 +91,10 @@ if (points < 1 || points > 10000) {
     await interaction.deferReply({ flags: 64 });
 
     const result = await pool.query(
-      `INSERT INTO house_points (user_id, username, house, category, points, added_by, channel_id, note)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+`INSERT INTO house_points (user_id, username, house, category, points, added_by, channel_id, note, added_by_user_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING id`,
-      [
+[
         userId,
         username,
         house,
@@ -102,7 +102,8 @@ if (points < 1 || points > 10000) {
         points,
         interaction.user.username,
         categoryChannels[category],
-        note || null
+        note || null,
+        interaction.user.id
       ]
     );
 
