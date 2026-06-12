@@ -10,7 +10,7 @@ async function handleKindnessReset(interaction) {
   const channel = interaction.options.getChannel('channel');
 
   try {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: 64 });
 
     await channel.send(
       'Hi friends ♥️ This is a reminder from your mods to be kind. We are seeing some activity here that concerns us. Please take a moment to reset and remember to lead with kindness. If this behavior continues, warnings may be issued. Thank you!'
