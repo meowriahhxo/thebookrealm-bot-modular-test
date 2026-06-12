@@ -13,16 +13,20 @@ let lastLeaderboardPost = 0;
 
 async function getSheetData() {
 // load double points category from DB
-  let doubleCategory = 'none';
+const easternTime = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const month = easternTime.getMonth() + 1;
+  const year = easternTime.getFullYear();
+
+  let doubleCategories = [];
   try {
-    const setting = await pool.query(`SELECT value FROM bot_settings WHERE key = 'double_points_category'`);
-    if (setting.rows.length > 0) doubleCategory = setting.rows[0].value;
+    const setting = await pool.query(
+      `SELECT value FROM bot_settings WHERE key = 'double_points_category' AND effective_month = $1 AND effective_year = $2`,
+      [month, year]
+    );
+    doubleCategories = setting.rows.map(r => r.value);
   } catch (err) {
     console.error('[Leaderboard] Failed to load double_points_category, defaulting to none:', err.message);
   }
-  const easternTime = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  const month = easternTime.getMonth() + 1;
-  const year = easternTime.getFullYear();
 
   const pointsResult = await pool.query(
     `SELECT house, SUM(points) as total_points 
@@ -110,13 +114,11 @@ async function getSheetData() {
     const selfcare = selfcareTotals[shortName] || 0;
 
     // calculate double points bonus — selfcare comes from selfcare_points, everything else from house_points
-    let doubleBonus = 0;
-    if (doubleCategory && doubleCategory !== 'none') {
-      if (doubleCategory === 'selfcare') {
-        // selfcare is already calculated above — just add it again
-        doubleBonus = selfcare;
+let doubleBonus = 0;
+    for (const doubleCategory of doubleCategories) {
+      if (doubleCategory === 'Self Care') {
+        doubleBonus += selfcare;
       } else {
-        // all other categories live in house_points
         const bonusResult = await pool.query(
           `SELECT COALESCE(SUM(points), 0) as bonus FROM house_points
            WHERE house = $1 AND category = $2
@@ -124,7 +126,7 @@ async function getSheetData() {
            AND EXTRACT(YEAR FROM created_at AT TIME ZONE 'America/New_York') = $4`,
           [shortName, doubleCategory, month, year]
         );
-        doubleBonus = parseInt(bonusResult.rows[0].bonus) || 0;
+        doubleBonus += parseInt(bonusResult.rows[0].bonus) || 0;
       }
     }
 

@@ -17,6 +17,7 @@ const joins = require('./joins');
 const sticky = require('./sticky');
 const housePoints = require('./housePoints');
 const constants = require('./constants');
+const modtools = require('./modtools');
 const { channelSprintTypes, fixedDurations, sprintVerbs, sprintHappyVerbs, sprintRoles, COMMON_ROOM_HOUSES, commonRoomMessageIds, monthNames } = constants;
 
 // ---- GOOGLE AUTH ----
@@ -45,6 +46,7 @@ leaderboard.init(client);
 selfcare.init(client);
 sorting.init(client);
 joins.init(client);
+modtools.init(client);
 
 // ---- GLOBAL ERROR HANDLERS ----
 process.on('unhandledRejection', (error) => {
@@ -219,6 +221,7 @@ async function registerCommands() {
           .setRequired(true))
       .toJSON(),
     ...housePoints.commands.map(cmd => cmd.toJSON()),
+    modtools.kindnessResetCommand.toJSON(),
   new SlashCommandBuilder()
         .setName('sortinglog')
         .setDescription('View sorting quiz submissions')
@@ -243,11 +246,16 @@ client.once('clientReady', async () => {
 
   // load bot settings from DB (checkin emoji, double points category)
   try {
-    const settingsResult = await db.pool.query(`SELECT key, value FROM bot_settings`);
-    const settings = {};
-    settingsResult.rows.forEach(row => { settings[row.key] = row.value; });
-    constants.setBotSettings({ checkinEmoji: settings.checkin_emoji });
-    console.log(`[Settings] Loaded — checkin_emoji: ${settings.checkin_emoji}, double_points_category: ${settings.double_points_category}`);
+const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+    const emojiResult = await db.pool.query(
+      `SELECT value FROM bot_settings WHERE key = 'checkin_emoji' AND effective_month = $1 AND effective_year = $2`,
+      [currentMonth, currentYear]
+    );
+    const checkinEmoji = emojiResult.rows[0]?.value || '✅';
+    constants.setBotSettings({ checkinEmoji });
+    console.log(`[Settings] Loaded — checkin_emoji: ${checkinEmoji} (${currentMonth}/${currentYear})`);
   } catch (err) {
     console.error('[Settings] Failed to load bot settings from DB, using defaults:', err.message);
   }
@@ -294,10 +302,16 @@ sorting.startSortingListener();
   // 8AM ET = 12:00 UTC — post common room messages
 cron.schedule('0 12 * * *', async () => {
     console.log('Posting common room messages...');
-    try {
-      const settingsResult = await db.pool.query(`SELECT value FROM bot_settings WHERE key = 'checkin_emoji'`);
-      if (settingsResult.rows.length > 0) {
-        constants.setBotSettings({ checkinEmoji: settingsResult.rows[0].value });
+try {
+      const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+      const currentMonth = now.getMonth() + 1;
+      const currentYear = now.getFullYear();
+      const emojiResult = await db.pool.query(
+        `SELECT value FROM bot_settings WHERE key = 'checkin_emoji' AND effective_month = $1 AND effective_year = $2`,
+        [currentMonth, currentYear]
+      );
+      if (emojiResult.rows.length > 0) {
+        constants.setBotSettings({ checkinEmoji: emojiResult.rows[0].value });
       }
     } catch (err) {
       console.error('[Settings] Failed to refresh checkin_emoji before morning message:', err);
@@ -688,6 +702,9 @@ if (interaction.commandName === 'leaderboard') {
 
 // ---- /sortinglog ----
   if (interaction.commandName === 'sortinglog') await sorting.handleSortingLog(interaction);
+
+// ---- /kindnessreset ----
+if (interaction.commandName === 'kindnessreset') await modtools.handleKindnessReset(interaction);
 
   // ---- /stick, /editstick, /unstick ----
   if (interaction.commandName === 'stick') await sticky.handleStick(interaction);
