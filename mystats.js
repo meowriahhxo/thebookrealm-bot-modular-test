@@ -118,7 +118,7 @@ async function drawAvatar(ctx, avatarURL, cx, cy, radius) {
 }
 
 // ---- CARD GENERATOR ----
-async function generateStatsCard({ username, avatarURL, house, period, totalMinutes, sprintCount, interaction }) {
+async function generateStatsCard({ username, avatarURL, house, period, totalMinutes, sprintCount, member }) {
   const W = 680;
   const H = 270;
   const canvas = createCanvas(W, H);
@@ -247,8 +247,8 @@ label('FROM THE LIBRARY OF THE BOOK REALM', IL, cardY + 26, 15);
 
   // ---- FOOTER ----
   const footerY = row4Y + 55;
-  const createdAt = new Date(Number(BigInt(interaction.user.id) >> 22n) + 1420070400000);
-  const memberSince = `MEMBER SINCE  ${createdAt.toLocaleString('en-US', { month: 'short', year: 'numeric' }).toUpperCase()}`;
+  const joinedAt = member ? member.joinedAt : null;
+  const memberSince = joinedAt ? `MEMBER SINCE  ${joinedAt.toLocaleString('en-US', { month: 'short', year: 'numeric' }).toUpperCase()}` : '';
   ctx.font = '9px "Roboto Mono"';
   ctx.fillStyle = '#c2ab81';
   ctx.textAlign = 'left';
@@ -338,7 +338,7 @@ async function handleMystats(interaction) {
 
     // ---- GENERATE CARD ----
     const cardBuffer = await generateStatsCard({
-      interaction,
+      member,
       username: interaction.user.username,
       avatarURL,
       house,
