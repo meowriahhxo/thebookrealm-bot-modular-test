@@ -207,7 +207,7 @@ ctx.stroke();
   const row2Y = cardY + 55;
   const avatarR = 24;
   const avatarCX = IL + avatarR;
-  const avatarCY = row2Y + 38;
+  const avatarCY = row2Y + 30;
   await drawAvatar(ctx, avatarURL, avatarCX, avatarCY, avatarR);
 
   const textX = IL + avatarR * 2 + 14;
