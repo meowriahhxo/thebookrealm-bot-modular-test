@@ -175,8 +175,8 @@ ctx.stroke();
   }
 
   // ---- ROW 1: Header ----
-  label('FROM THE LIBRARY OF', IL, cardY + 20);
-  label('THE BOOK REALM', IL, cardY + 34);
+ label('FROM THE LIBRARY OF THE BOOK REALM', IL, cardY + 26);
+
 
   // Call number top right
   ctx.font = '10px "Roboto Mono"';
