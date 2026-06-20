@@ -120,7 +120,7 @@ async function drawAvatar(ctx, avatarURL, cx, cy, radius) {
 // ---- CARD GENERATOR ----
 async function generateStatsCard({ username, avatarURL, house, period, totalMinutes, sprintCount }) {
   const W = 680;
-  const H = 290;
+  const H = 270;
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext('2d');
 
@@ -174,7 +174,7 @@ function label(text, x, y, size = 10) {
   }
 
   // ---- ROW 1: Header ----
-label('FROM THE LIBRARY OF THE BOOK REALM', IL, cardY + 26, 13);
+label('FROM THE LIBRARY OF THE BOOK REALM', IL, cardY + 26, 15);
 
 
   // Call number top right
@@ -247,8 +247,12 @@ label('FROM THE LIBRARY OF THE BOOK REALM', IL, cardY + 26, 13);
 
   // ---- FOOTER ----
   const footerY = row4Y + 55;
+  const createdAt = new Date(Number(BigInt(interaction.user.id) >> 22n) + 1420070400000);
+  const memberSince = `MEMBER SINCE  ${createdAt.toLocaleString('en-US', { month: 'short', year: 'numeric' }).toUpperCase()}`;
   ctx.font = '9px "Roboto Mono"';
   ctx.fillStyle = '#c2ab81';
+  ctx.textAlign = 'left';
+  ctx.fillText(memberSince, IL, footerY + 20);
   ctx.textAlign = 'right';
   ctx.fillText('THE BOOK REALM — EST. 2021', IR, footerY + 20);
   ctx.textAlign = 'left';
