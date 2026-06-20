@@ -118,117 +118,143 @@ async function drawAvatar(ctx, avatarURL, cx, cy, radius) {
 
 // ---- CARD GENERATOR ----
 async function generateStatsCard({ username, avatarURL, house, period, totalMinutes, sprintCount }) {
-  const W = 800;
-  const H = 400;
-  const MARGIN = 40; // left/right padding inside the card
+  const W = 680;
+  const H = 380;
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext('2d');
 
   // ---- BACKGROUND ----
-  // Dark outer background (matches the blog page dark bg)
   ctx.fillStyle = '#12102a';
   ctx.fillRect(0, 0, W, H);
 
-  // Card itself — cream colored, inset from edges
-  const cardX = 60;
-  const cardY = 40;
-  const cardW = W - 120;
-  const cardH = H - 80;
+  // Card
+  const cardX = 40;
+  const cardY = 30;
+  const cardW = W - 80;
+  const cardH = H - 60;
   ctx.fillStyle = '#faf7ef';
   ctx.fillRect(cardX, cardY, cardW, cardH);
 
-  // Card border
+  // Top + bottom borders only
   ctx.strokeStyle = '#d8d0ba';
   ctx.lineWidth = 1;
-  ctx.strokeRect(cardX, cardY, cardW, cardH);
+  ctx.beginPath();
+  ctx.moveTo(cardX, cardY);
+  ctx.lineTo(cardX + cardW, cardY);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cardX, cardY + cardH);
+  ctx.lineTo(cardX + cardW, cardY + cardH);
+  ctx.stroke();
 
-  const innerLeft = cardX + MARGIN;
-  const innerRight = cardX + cardW - MARGIN;
-  const innerWidth = innerRight - innerLeft;
+  const IL = cardX + 14; // inner left
+  const IR = cardX + cardW - 14; // inner right
 
-  // ---- ROW 1: Header (FROM THE LIBRARY OF / THE BOOK REALM + call number + house stamp) ----
-  const row1Y = cardY;
-  const row1H = 65;
-
-  // "FROM THE LIBRARY OF / THE BOOK REALM"
-  ctx.font = '11px Roboto';
-  ctx.fillStyle = '#6a5f48';
-  ctx.fillText('FROM THE LIBRARY OF', innerLeft, row1Y + 22);
-  ctx.fillText('THE BOOK REALM', innerLeft, row1Y + 38);
-
-  // Call number top right
-  ctx.font = '10px Roboto';
-  ctx.fillStyle = '#6a5f48';
-  ctx.textAlign = 'right';
-  ctx.fillText('READER.001', innerRight, row1Y + 22);
-  ctx.textAlign = 'left';
-
-  // House stamp — bottom right of header
-  if (house && HOUSE_COLORS[house]) {
-    drawHouseStamp(ctx, house, innerRight - ctx.measureText(house.toUpperCase()).width - 8, row1Y + 52);
+  function label(text, x, y) {
+    ctx.font = '10px "Courier New"';
+    ctx.fillStyle = '#6a5f48';
+    ctx.letterSpacing = '2px';
+    ctx.fillText(text, x, y);
   }
 
-  // Divider below row 1
-  drawDivider(ctx, row1Y + row1H, cardX, cardX + cardW);
+  function value(text, x, y, maxWidth) {
+    ctx.font = '18px "Courier New"';
+    ctx.fillStyle = '#2a2418';
+    let size = 18;
+    while (ctx.measureText(text).width > maxWidth && size > 11) {
+      size--;
+      ctx.font = `${size}px "Courier New"`;
+    }
+    ctx.fillText(text, x, y);
+  }
 
-  // ---- ROW 2: Avatar + Username ----
-  const row2Y = row1Y + row1H;
-  const row2H = 80;
-  const avatarR = 28;
-  const avatarCX = innerLeft + avatarR;
-  const avatarCY = row2Y + row2H / 2;
+  function divider(y) {
+    ctx.beginPath();
+    ctx.moveTo(cardX, y);
+    ctx.lineTo(cardX + cardW, y);
+    ctx.strokeStyle = '#2a2418';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
 
+  // ---- ROW 1: Header ----
+  label('FROM THE LIBRARY OF', IL, cardY + 20);
+  label('THE BOOK REALM', IL, cardY + 34);
+
+  // Call number top right
+  ctx.font = '10px "Courier New"';
+  ctx.fillStyle = '#6a5f48';
+  ctx.textAlign = 'right';
+  ctx.fillText('READER.001', IR, cardY + 20);
+  ctx.textAlign = 'left';
+
+  // House stamp
+  if (house && HOUSE_COLORS[house]) {
+    const colors = HOUSE_COLORS[house];
+    const stampText = house.toUpperCase();
+    ctx.font = 'bold 9px "Courier New"';
+    const stampW = ctx.measureText(stampText).width + 14;
+    const stampH = 16;
+    const stampX = IR - stampW;
+    const stampY = cardY + 38;
+    ctx.strokeStyle = colors.border;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(stampX, stampY, stampW, stampH);
+    ctx.fillStyle = colors.text;
+    ctx.fillText(stampText, stampX + 7, stampY + 11);
+  }
+
+  divider(cardY + 55);
+
+  // ---- ROW 2: Reader (avatar + username) ----
+  const row2Y = cardY + 55;
+  const avatarR = 24;
+  const avatarCX = IL + avatarR;
+  const avatarCY = row2Y + 38;
   await drawAvatar(ctx, avatarURL, avatarCX, avatarCY, avatarR);
 
-  // READER label + username to the right of avatar
-  const textStartX = innerLeft + avatarR * 2 + 16;
-  drawLabel(ctx, 'READER', textStartX, row2Y + 26);
-  drawValue(ctx, username, textStartX, row2Y + 54, innerRight - textStartX);
+  const textX = IL + avatarR * 2 + 14;
+  label('READER', textX, row2Y + 18);
+  value(username, textX, row2Y + 42, IR - textX);
 
-  // Divider below row 2
-  drawDivider(ctx, row2Y + row2H, cardX, cardX + cardW);
+  divider(row2Y + 62);
 
   // ---- ROW 3: Period ----
-  const row3Y = row2Y + row2H;
-  const row3H = 52;
+  const row3Y = row2Y + 62;
+  label('PERIOD', IL, row3Y + 18);
+  ctx.font = '16px "Courier New"';
+  ctx.fillStyle = '#2a2418';
+  ctx.fillText(period, IL, row3Y + 38);
 
-  drawLabel(ctx, 'PERIOD', innerLeft, row3Y + 20);
-  drawValueSm(ctx, period, innerLeft, row3Y + 40);
+  divider(row3Y + 55);
 
-  // Divider below row 3
-  drawDivider(ctx, row3Y + row3H, cardX, cardX + cardW);
+  // ---- ROW 4: Minutes | Sprints ----
+  const row4Y = row3Y + 55;
+  const splitX = cardX + cardW / 2;
 
-  // ---- ROW 4: Split — Minutes Read | Sprints Joined ----
-  const row4Y = row3Y + row3H;
-  const row4H = 70;
-  const splitX = cardX + cardW / 2; // vertical divider in the middle
+  label('MINUTES READ', IL, row4Y + 18);
+  value(totalMinutes.toLocaleString(), IL, row4Y + 46, splitX - IL - 10);
 
-  // Left: Minutes Read
-  drawLabel(ctx, 'MINUTES READ', innerLeft, row4Y + 22);
-  drawValue(ctx, totalMinutes.toLocaleString(), innerLeft, row4Y + 56, splitX - innerLeft - 10);
-
-  // Vertical divider between the two columns
+  // Vertical divider
   ctx.beginPath();
   ctx.moveTo(splitX, row4Y);
-  ctx.lineTo(splitX, row4Y + row4H);
+  ctx.lineTo(splitX, row4Y + 65);
   ctx.strokeStyle = '#2a2418';
   ctx.lineWidth = 1;
   ctx.stroke();
 
-  // Right: Sprints Joined
-  const rightColX = splitX + MARGIN;
-  drawLabel(ctx, 'SPRINTS JOINED', rightColX, row4Y + 22);
-  drawValue(ctx, sprintCount.toLocaleString(), rightColX, row4Y + 56, innerRight - rightColX);
+  const rightX = splitX + 14;
+  label('SPRINTS JOINED', rightX, row4Y + 18);
+  value(sprintCount.toLocaleString(), rightX, row4Y + 46, IR - rightX);
 
-  // Divider below row 4
-  drawDivider(ctx, row4Y + row4H, cardX, cardX + cardW);
+  divider(row4Y + 65);
 
   // ---- FOOTER ----
-  const footerY = row4Y + row4H;
-  ctx.font = '10px Roboto';
+  const footerY = row4Y + 65;
+  ctx.font = '9px "Courier New"';
   ctx.fillStyle = '#c2ab81';
   ctx.textAlign = 'right';
-  ctx.fillText('THE BOOK REALM — EST. 2020', innerRight, footerY + 22);
+  ctx.fillText('THE BOOK REALM — EST. 2021', IR, footerY + 20);
   ctx.textAlign = 'left';
 
   return canvas.toBuffer();
