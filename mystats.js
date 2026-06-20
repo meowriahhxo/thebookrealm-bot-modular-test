@@ -147,10 +147,9 @@ ctx.stroke();
   const IL = cardX + 14; // inner left
   const IR = cardX + cardW - 14; // inner right
 
-  function label(text, x, y) {
-    ctx.font = '10px "Roboto Mono"';
+function label(text, x, y, size = 10) {
+    ctx.font = `${size}px "Roboto Mono"`;
     ctx.fillStyle = '#6a5f48';
-    ctx.letterSpacing = '2px';
     ctx.fillText(text, x, y);
   }
 
@@ -175,7 +174,7 @@ ctx.stroke();
   }
 
   // ---- ROW 1: Header ----
- label('FROM THE LIBRARY OF THE BOOK REALM', IL, cardY + 26);
+label('FROM THE LIBRARY OF THE BOOK REALM', IL, cardY + 26, 13);
 
 
   // Call number top right
