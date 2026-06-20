@@ -118,7 +118,7 @@ async function drawAvatar(ctx, avatarURL, cx, cy, radius) {
 }
 
 // ---- CARD GENERATOR ----
-async function generateStatsCard({ username, avatarURL, house, period, totalMinutes, sprintCount }) {
+async function generateStatsCard({ username, avatarURL, house, period, totalMinutes, sprintCount, interaction }) {
   const W = 680;
   const H = 270;
   const canvas = createCanvas(W, H);
@@ -338,6 +338,7 @@ async function handleMystats(interaction) {
 
     // ---- GENERATE CARD ----
     const cardBuffer = await generateStatsCard({
+      interaction,
       username: interaction.user.username,
       avatarURL,
       house,
