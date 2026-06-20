@@ -318,9 +318,11 @@ async function handleMystats(interaction) {
     else periodLabel = 'Lifetime';
 
     // ---- HOUSE LOOKUP ----
+    // ---- HOUSE LOOKUP ----
     let house = null;
+    let member = null;
     try {
-      const member = await interaction.guild.members.fetch(interaction.user.id);
+      member = await interaction.guild.members.fetch(interaction.user.id);
       for (const [roleId, houseName] of Object.entries(HOUSE_ROLE_MAP)) {
         if (member.roles.cache.has(roleId)) {
           house = houseName;
