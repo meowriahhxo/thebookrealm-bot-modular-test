@@ -129,10 +129,10 @@ async function generateStatsCard({ username, avatarURL, house, period, totalMinu
   ctx.fillRect(0, 0, W, H);
 
   // Card
-  const cardX = 40;
-  const cardY = 30;
-  const cardW = W - 80;
-  const cardH = H - 60;
+  const cardX = 0;
+  const cardY = 0;
+  const cardW = W;
+  const cardH = H;
   ctx.fillStyle = '#faf7ef';
   ctx.fillRect(cardX, cardY, cardW, cardH);
 
@@ -182,7 +182,7 @@ ctx.stroke();
   ctx.font = '10px "Roboto Mono"';
   ctx.fillStyle = '#6a5f48';
   ctx.textAlign = 'right';
-  ctx.fillText('READER.001', IR, cardY + 20);
+  ctx.fillText('TBR.RDR', IR, cardY + 20);
   ctx.textAlign = 'left';
 
   // House stamp
