@@ -5,6 +5,7 @@ const { monthNames } = require('./constants');
 
 registerFont('./Roboto-Bold.ttf', { family: 'Roboto', weight: 'bold' });
 registerFont('./Roboto-Regular.ttf', { family: 'Roboto' });
+registerFont('./RobotoMono-Regular.ttf', { family: 'Roboto Mono' });
 
 let client;
 
@@ -119,7 +120,7 @@ async function drawAvatar(ctx, avatarURL, cx, cy, radius) {
 // ---- CARD GENERATOR ----
 async function generateStatsCard({ username, avatarURL, house, period, totalMinutes, sprintCount }) {
   const W = 680;
-  const H = 380;
+  const H = 290;
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext('2d');
 
@@ -136,34 +137,30 @@ async function generateStatsCard({ username, avatarURL, house, period, totalMinu
   ctx.fillRect(cardX, cardY, cardW, cardH);
 
   // Top + bottom borders only
-  ctx.strokeStyle = '#d8d0ba';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(cardX, cardY);
-  ctx.lineTo(cardX + cardW, cardY);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(cardX, cardY + cardH);
-  ctx.lineTo(cardX + cardW, cardY + cardH);
-  ctx.stroke();
+ctx.strokeStyle = '#d8d0ba';
+ctx.lineWidth = 1;
+ctx.beginPath();
+ctx.moveTo(cardX, cardY);
+ctx.lineTo(cardX + cardW, cardY);
+ctx.stroke();
 
   const IL = cardX + 14; // inner left
   const IR = cardX + cardW - 14; // inner right
 
   function label(text, x, y) {
-    ctx.font = '10px "Courier New"';
+    ctx.font = '10px "Roboto Mono"';
     ctx.fillStyle = '#6a5f48';
     ctx.letterSpacing = '2px';
     ctx.fillText(text, x, y);
   }
 
   function value(text, x, y, maxWidth) {
-    ctx.font = '18px "Courier New"';
+    ctx.font = '18px "Roboto Mono"';
     ctx.fillStyle = '#2a2418';
     let size = 18;
     while (ctx.measureText(text).width > maxWidth && size > 11) {
       size--;
-      ctx.font = `${size}px "Courier New"`;
+      ctx.font = `${size}px "Roboto Mono"`;
     }
     ctx.fillText(text, x, y);
   }
@@ -182,7 +179,7 @@ async function generateStatsCard({ username, avatarURL, house, period, totalMinu
   label('THE BOOK REALM', IL, cardY + 34);
 
   // Call number top right
-  ctx.font = '10px "Courier New"';
+  ctx.font = '10px "Roboto Mono"';
   ctx.fillStyle = '#6a5f48';
   ctx.textAlign = 'right';
   ctx.fillText('READER.001', IR, cardY + 20);
@@ -192,11 +189,11 @@ async function generateStatsCard({ username, avatarURL, house, period, totalMinu
   if (house && HOUSE_COLORS[house]) {
     const colors = HOUSE_COLORS[house];
     const stampText = house.toUpperCase();
-    ctx.font = 'bold 9px "Courier New"';
+    ctx.font = 'bold 9px "Roboto Mono"';
     const stampW = ctx.measureText(stampText).width + 14;
     const stampH = 16;
     const stampX = IR - stampW;
-    const stampY = cardY + 38;
+    const stampY = cardY + 28;
     ctx.strokeStyle = colors.border;
     ctx.lineWidth = 1.5;
     ctx.strokeRect(stampX, stampY, stampW, stampH);
@@ -222,7 +219,7 @@ async function generateStatsCard({ username, avatarURL, house, period, totalMinu
   // ---- ROW 3: Period ----
   const row3Y = row2Y + 62;
   label('PERIOD', IL, row3Y + 18);
-  ctx.font = '16px "Courier New"';
+  ctx.font = '16px "Roboto Mono"';
   ctx.fillStyle = '#2a2418';
   ctx.fillText(period, IL, row3Y + 38);
 
@@ -250,8 +247,8 @@ async function generateStatsCard({ username, avatarURL, house, period, totalMinu
   divider(row4Y + 65);
 
   // ---- FOOTER ----
-  const footerY = row4Y + 65;
-  ctx.font = '9px "Courier New"';
+  const footerY = row4Y + 55;
+  ctx.font = '9px "Roboto Mono"';
   ctx.fillStyle = '#c2ab81';
   ctx.textAlign = 'right';
   ctx.fillText('THE BOOK REALM — EST. 2021', IR, footerY + 20);
