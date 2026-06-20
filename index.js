@@ -4,8 +4,6 @@ const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, ActionRowB
 const { google } = require('googleapis');
 const cron = require('node-cron');
 const { createCanvas, loadImage, registerFont } = require('canvas');
-registerFont('./Roboto-Bold.ttf', { family: 'Roboto', weight: 'bold' });
-registerFont('./Roboto-Regular.ttf', { family: 'Roboto' });
 
 // ---- MODULES ----
 const db = require('./db');
@@ -18,6 +16,8 @@ const sticky = require('./sticky');
 const housePoints = require('./housePoints');
 const constants = require('./constants');
 const modtools = require('./modtools');
+const mystats = require('./mystats');
+
 const { channelSprintTypes, fixedDurations, sprintVerbs, sprintHappyVerbs, sprintRoles, COMMON_ROOM_HOUSES, commonRoomMessageIds, monthNames } = constants;
 
 // ---- GOOGLE AUTH ----
@@ -47,6 +47,7 @@ selfcare.init(client);
 sorting.init(client);
 joins.init(client);
 modtools.init(client);
+mystats.init(client);
 
 // ---- GLOBAL ERROR HANDLERS ----
 process.on('unhandledRejection', (error) => {
@@ -485,67 +486,8 @@ if (interaction.commandName === 'leaderboard') {
     console.error('Error handling leaderboard command:', error);
   }
 }
-  // ---- /mystats ----
-  if (interaction.commandName === 'mystats') {
-    try {
-      await interaction.deferReply();
-      const period = interaction.options.getString('period');
-      const date = interaction.options.getString('date');
-      const now = new Date();
-      const easternTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-      const currentMonth = monthNames[easternTime.getMonth()];
-      const currentYear = easternTime.getFullYear();
-      let month = date ? date.split(' ')[0] : currentMonth;
-      let year;
-      if (date) {
-        const parts = date.split(' ');
-        year = parseInt(parts.length === 1 ? parts[0] : parts[1]);
-      } else {
-        year = currentYear;
-      }
-
-      let result;
-      if (period === 'monthly') {
-        result = await db.pool.query(
-          'SELECT * FROM sprint_results WHERE user_id = $1 AND EXTRACT(MONTH FROM sprint_date) = $2 AND EXTRACT(YEAR FROM sprint_date) = $3',
-          [interaction.user.id, monthNames.indexOf(month) + 1, year]
-        );
-      } else if (period === 'yearly') {
-        result = await db.pool.query(
-          'SELECT * FROM sprint_results WHERE user_id = $1 AND EXTRACT(YEAR FROM sprint_date) = $2',
-          [interaction.user.id, year]
-        );
-      } else {
-        result = await db.pool.query(
-          'SELECT * FROM sprint_results WHERE user_id = $1',
-          [interaction.user.id]
-        );
-      }
-
-      const sprintCount = result.rows.length;
-      const totalMinutes = result.rows.reduce((sum, row) => sum + row.minutes, 0);
-      console.log(`[mystats] ${interaction.user.username} requested ${period} stats${date ? ` for ${date}` : ''} — ${sprintCount} sprints, ${totalMinutes} minutes`);
-
-      if (sprintCount === 0) {
-        await interaction.editReply({ content: `You haven't participated in any sprints this period! Join us in <#${process.env.TALL_TOMES_CHANNEL_ID}> or <#${process.env.SHORT_STACKS_CHANNEL_ID}> to add to your stats!`, flags: 64 });
-        return;
-      }
-
-      let chosenPeriod;
-      if (period === 'monthly') chosenPeriod = `${month} ${year}`;
-      else if (period === 'yearly') chosenPeriod = year;
-      else chosenPeriod = null;
-
-      const title = period === 'lifetime'
-        ? `<a:book_pages:838547896361811979> **${interaction.user.username}'s Lifetime Stats**`
-        : `<a:book_pages:838547896361811979> **${interaction.user.username}'s ${period.charAt(0).toUpperCase() + period.slice(1)} Stats for ${chosenPeriod}**`;
-
-      await interaction.editReply({ content: `${title}\n\nYou've read **${totalMinutes.toLocaleString()} minutes** across **${sprintCount} sprints**!` });
-    } catch (error) {
-      console.error('Error handling mystats command:', error);
-    }
-  }
-
+// ---- /mystats ----
+if (interaction.commandName === 'mystats') await mystats.handleMystats(interaction);
   // ---- /export ----
   if (interaction.commandName === 'export') {
     try {
